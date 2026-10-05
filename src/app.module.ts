@@ -14,6 +14,9 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { HealthModule } from './health/health.module';
+import { UsersModule } from './users/users.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -42,6 +45,9 @@ import { HealthModule } from './health/health.module';
 
     CommonModule,
     HealthModule,
+    UsersModule,
+    AuditLogsModule,
+    AuthModule,
   ],
   providers: [
     // Order matters: the exception filter normalises everything below it.
