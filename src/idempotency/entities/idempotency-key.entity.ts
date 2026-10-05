@@ -13,6 +13,13 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColum
  * different shape; PROMPT-B.E's table is the one the frontend contract needs, so
  * it wins (documented deviation).
  */
+/**
+ * The stored snapshot is always the response envelope (`{ data, meta? }`), so it
+ * is typed concretely rather than as a recursive JsonValue union — the latter
+ * makes TypeORM's DeepPartial inference exceed the compiler depth limit.
+ */
+export type IdempotentSnapshot = Record<string, unknown>;
+
 @Index('idempotency_keys_user_id', ['userId'])
 @Index('idempotency_keys_created_at', ['createdAt'])
 @Entity({ name: 'idempotency_keys' })
@@ -35,7 +42,7 @@ export class IdempotencyKey {
   responseStatus!: number | null;
 
   @Column({ name: 'response_snapshot', type: 'jsonb', nullable: true })
-  responseSnapshot!: unknown;
+  responseSnapshot!: IdempotentSnapshot | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { IdempotencyInterceptor } from './idempotency/idempotency.interceptor';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { configurations } from './config/configuration';
@@ -23,6 +24,9 @@ import { FuelTypesModule } from './fuel-types/fuel-types.module';
 import { FuelPricesModule } from './fuel-prices/fuel-prices.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { TankersModule } from './tankers/tankers.module';
+import { IdempotencyModule } from './idempotency/idempotency.module';
+import { DeliveriesModule } from './deliveries/deliveries.module';
+import { FuelOrdersModule } from './fuel-orders/fuel-orders.module';
 
 @Module({
   imports: [
@@ -60,11 +64,15 @@ import { TankersModule } from './tankers/tankers.module';
     FuelPricesModule,
     SuppliersModule,
     TankersModule,
+    IdempotencyModule,
+    DeliveriesModule,
+    FuelOrdersModule,
   ],
   providers: [
     // Order matters: the exception filter normalises everything below it.
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
