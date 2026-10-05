@@ -129,7 +129,15 @@ export class DecimalMath {
     return Number(this.toFixedString(value, this.MONEY_SCALE));
   }
 
-  /** `litresSold × unitPrice` rounded to money precision. */
+  /**
+   * `litresSold × unitPrice`, with the product rounded to money precision.
+   *
+   * The multiplication is exact at the operands' own scales and only the result
+   * is rounded — the price is deliberately NOT pre-rounded, so a caller can never
+   * have an input silently altered underneath it. Callers reading a price from
+   * `fuel_prices` get NUMERIC(18,2) from the database, i.e. already at
+   * MONEY_SCALE, so this distinction never arises on real data.
+   */
   static lineTotal(litres: string | number, unitPrice: string | number): string {
     const product = this.multiply(this.parse(litres), this.parse(unitPrice));
     return this.toFixedString(this.rescale(product, this.MONEY_SCALE), this.MONEY_SCALE);
