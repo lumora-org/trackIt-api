@@ -21,6 +21,8 @@ import { BusinessesModule } from './businesses/businesses.module';
 import { BranchesModule } from './branches/branches.module';
 import { FuelTypesModule } from './fuel-types/fuel-types.module';
 import { FuelPricesModule } from './fuel-prices/fuel-prices.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { TankersModule } from './tankers/tankers.module';
 
 @Module({
   imports: [
@@ -56,6 +58,8 @@ import { FuelPricesModule } from './fuel-prices/fuel-prices.module';
     BranchesModule,
     FuelTypesModule,
     FuelPricesModule,
+    SuppliersModule,
+    TankersModule,
   ],
   providers: [
     // Order matters: the exception filter normalises everything below it.
