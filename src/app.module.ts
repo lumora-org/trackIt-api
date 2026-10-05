@@ -30,6 +30,7 @@ import { FuelOrdersModule } from './fuel-orders/fuel-orders.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SalesModule } from './sales/sales.module';
+import { DailyReportsModule } from './daily-reports/daily-reports.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { SalesModule } from './sales/sales.module';
     InventoryModule,
     NotificationsModule,
     SalesModule,
+    DailyReportsModule,
   ],
   providers: [
     // Order matters: the exception filter normalises everything below it.
