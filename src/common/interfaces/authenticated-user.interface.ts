@@ -1,4 +1,4 @@
-import { UserRole } from '../enums/user-role.enum';
+import { AccountStatus, UserRole } from '../enums/user-role.enum';
 
 /**
  * The authoritative identity of the caller, derived exclusively from a verified
@@ -13,7 +13,7 @@ export interface AuthenticatedUser {
   phone: string | null;
   avatarUrl: string | null;
   role: UserRole;
-  status: string;
+  status: AccountStatus;
   businessId: string | null;
   branchId: string | null;
 }

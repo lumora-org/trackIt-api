@@ -17,6 +17,8 @@ import { HealthModule } from './health/health.module';
 import { UsersModule } from './users/users.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { AuthModule } from './auth/auth.module';
+import { BusinessesModule } from './businesses/businesses.module';
+import { BranchesModule } from './branches/branches.module';
 
 @Module({
   imports: [
@@ -48,6 +50,8 @@ import { AuthModule } from './auth/auth.module';
     UsersModule,
     AuditLogsModule,
     AuthModule,
+    BusinessesModule,
+    BranchesModule,
   ],
   providers: [
     // Order matters: the exception filter normalises everything below it.
