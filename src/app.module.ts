@@ -28,6 +28,7 @@ import { IdempotencyModule } from './idempotency/idempotency.module';
 import { DeliveriesModule } from './deliveries/deliveries.module';
 import { FuelOrdersModule } from './fuel-orders/fuel-orders.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { InventoryModule } from './inventory/inventory.module';
     DeliveriesModule,
     FuelOrdersModule,
     InventoryModule,
+    NotificationsModule,
   ],
   providers: [
     // Order matters: the exception filter normalises everything below it.
