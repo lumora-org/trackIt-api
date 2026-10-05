@@ -3,6 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { NotificationStatus, NotificationType } from '../common/enums/notification.enum';
 import { AccountStatus, UserRole } from '../common/enums/user-role.enum';
+import { notFound } from '../common/errors/api-exception';
+import { PaginatedResult } from '../common/interfaces/paginated-result.interface';
+import { ListNotificationsQueryDto } from './dto/notification.dto';
+import { AppNotificationDto } from './dto/notification-response.dto';
 import { Notification } from './entities/notification.entity';
 
 export interface NotificationRequest {
@@ -138,5 +142,83 @@ export class NotificationsService {
       .getRawMany<{ id: string }>();
 
     return rows.map((row) => row.id);
+  }
+
+  /**
+   * The caller's own notifications. A recipient may only ever read their own
+   * (docs/04 §72): the filter is built from the authenticated id, never from a
+   * query parameter, so there is nothing to tamper with.
+   */
+  async findForRecipient(
+    query: ListNotificationsQueryDto,
+    userId: string,
+  ): Promise<PaginatedResult<AppNotificationDto>> {
+    const builder = this.repository
+      .createQueryBuilder('notification')
+      .where('notification.user_id = :userId', { userId })
+      .orderBy('notification.created_at', 'DESC')
+      .skip(query.skip)
+      .take(query.take);
+
+    if (query.status) {
+      builder.andWhere('notification.status = :status', { status: query.status });
+    }
+    if (query.type) {
+      builder.andWhere('notification.type = :type', { type: query.type });
+    }
+
+    const [items, total] = await builder.getManyAndCount();
+
+    return PaginatedResult.of(
+      items.map((item) => this.toResponse(item)),
+      total,
+      query.pageNumber,
+      query.take,
+    );
+  }
+
+  /** Marks one notification read. A foreign id is indistinguishable from absent. */
+  async markRead(id: string, userId: string): Promise<AppNotificationDto> {
+    const notification = await this.repository.findOne({ where: { id, userId } });
+
+    // Scoped by recipient in the query, so another user's id simply does not
+    // resolve rather than leaking that the row exists.
+    if (!notification) {
+      throw notFound('The requested notification was not found.');
+    }
+
+    if (notification.status === NotificationStatus.UNREAD) {
+      notification.status = NotificationStatus.READ;
+      notification.readAt = new Date();
+      await this.repository.save(notification);
+    }
+
+    return this.toResponse(notification);
+  }
+
+  async markAllRead(userId: string): Promise<number> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .update(Notification)
+      .set({ status: NotificationStatus.READ, readAt: new Date() })
+      .where('user_id = :userId', { userId })
+      .andWhere('status = :status', { status: NotificationStatus.UNREAD })
+      .execute();
+
+    return result.affected ?? 0;
+  }
+
+  toResponse(notification: Notification): AppNotificationDto {
+    return {
+      id: notification.id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      status: notification.status,
+      resourceType: notification.resourceType,
+      resourceId: notification.resourceId,
+      createdAt: notification.createdAt,
+      readAt: notification.readAt,
+    };
   }
 }
