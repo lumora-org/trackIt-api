@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { NotificationStatus, NotificationType } from '../../common/enums/notification.enum';
-import { BaseEntity, pgEnum } from '../../common/entities/base.entity';
+import { BaseEntity } from '../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
 
 /** Notifications are always addressed to a single recipient. */
@@ -17,7 +17,7 @@ export class Notification extends BaseEntity {
   userId!: string;
 
   @ApiProperty({ enum: NotificationType })
-  @Column({ type: pgEnum('notification_type') })
+  @Column({ type: 'enum', enumName: 'notification_type' })
   type!: NotificationType;
 
   @ApiProperty({ example: 'Daily report submitted' })
@@ -29,7 +29,7 @@ export class Notification extends BaseEntity {
   message!: string | null;
 
   @ApiProperty({ enum: NotificationStatus })
-  @Column({ type: pgEnum('notification_status'), default: NotificationStatus.UNREAD })
+  @Column({ type: 'enum', enumName: 'notification_status', default: NotificationStatus.UNREAD })
   status!: NotificationStatus;
 
   @ApiProperty({ nullable: true })

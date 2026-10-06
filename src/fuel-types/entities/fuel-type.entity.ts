@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { AccountStatus } from '../../common/enums/user-role.enum';
-import { SoftDeletableEntity, pgEnum } from '../../common/entities/base.entity';
+import { SoftDeletableEntity } from '../../common/entities/base.entity';
 import { Business } from '../../businesses/entities/business.entity';
 
 @Index('fuel_types_business_id', ['businessId'])
@@ -27,7 +27,7 @@ export class FuelType extends SoftDeletableEntity {
 
   /** Reuses account_status; INACTIVE fuel types cannot take new sales/orders. */
   @ApiProperty({ enum: AccountStatus })
-  @Column({ type: pgEnum('account_status'), default: AccountStatus.ACTIVE })
+  @Column({ type: 'enum', enumName: 'account_status', default: AccountStatus.ACTIVE })
   status!: AccountStatus;
 
   @ManyToOne(() => Business, { onDelete: 'RESTRICT' })

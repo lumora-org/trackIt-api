@@ -93,7 +93,9 @@ export class FuelOrdersService {
       .leftJoinAndSelect('order.supplier', 'supplier')
       .leftJoinAndSelect('order.destinationBranch', 'destinationBranch')
       .where('1 = 1')
-      .orderBy('order.created_at', 'DESC')
+      // Property path, not the DB column name: skip/take + joins makes TypeORM
+      // resolve order criteria through entity metadata (see deliveries findAll).
+      .orderBy('order.createdAt', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

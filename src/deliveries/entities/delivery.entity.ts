@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { DeliveryStatus } from '../../common/enums/fuel.enum';
-import { BaseEntity, pgEnum } from '../../common/entities/base.entity';
+import { BaseEntity } from '../../common/entities/base.entity';
 import { FuelOrder } from '../../fuel-orders/entities/fuel-order.entity';
 import { Tanker } from '../../tankers/entities/tanker.entity';
 import { Branch } from '../../branches/entities/branch.entity';
@@ -38,7 +38,8 @@ export class Delivery extends BaseEntity {
   @ApiProperty({ enum: DeliveryStatus })
   @Column({
     name: 'delivery_status',
-    type: pgEnum('delivery_status'),
+    type: 'enum',
+    enumName: 'delivery_status',
     default: DeliveryStatus.PENDING,
   })
   status!: DeliveryStatus;

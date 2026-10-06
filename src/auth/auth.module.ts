@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { SignOptions } from 'jsonwebtoken';
@@ -19,7 +19,10 @@ import { JwtStrategy } from './strategies/jwt.strategy';
  */
 @Module({
   imports: [
-    UsersModule,
+    // forwardRef: UsersModule imports AuthModule for PasswordService/
+    // TokenService, so the pair form a module-level cycle that only resolves
+    // with lazy references (docs/05 §25).
+    forwardRef(() => UsersModule),
     AuditLogsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     TypeOrmModule.forFeature([RefreshToken]),

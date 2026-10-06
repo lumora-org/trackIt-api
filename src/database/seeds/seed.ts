@@ -66,8 +66,8 @@ async function run(dataSource: DataSource): Promise<void> {
       name: BUSINESS_NAME,
       registrationNumber: 'RC123456',
       email: 'info@kbyglobal.com',
-      phone: '+2348000000000',
-      address: 'Lagos, Nigeria',
+      phone: '+2348055332211',
+      address: 'Birnin Gwari, Kaduna',
       status: BusinessStatus.ACTIVE,
     });
     const businessId: string = business.id;
@@ -76,10 +76,10 @@ async function run(dataSource: DataSource): Promise<void> {
     await manager.getRepository('users').save({
       businessId: null,
       branchId: null,
-      firstName: 'Platform',
-      lastName: 'Administrator',
+      firstName: 'Ahmad',
+      lastName: 'Abdul',
       email: 'superadmin@kbyglobal.com',
-      phone: null,
+      phone: '+2349063801889',
       avatarUrl: null,
       passwordHash,
       role: UserRole.SUPER_ADMIN,
@@ -91,10 +91,10 @@ async function run(dataSource: DataSource): Promise<void> {
     const admin = await manager.getRepository('users').save({
       businessId,
       branchId: null,
-      firstName: 'Kehinde',
-      lastName: 'Balogun',
+      firstName: 'Kabiru',
+      lastName: '2c',
       email: 'admin@kbyglobal.com',
-      phone: '+2348000000001',
+      phone: '+2348199887755',
       avatarUrl: null,
       passwordHash,
       role: UserRole.ADMIN,
@@ -105,17 +105,17 @@ async function run(dataSource: DataSource): Promise<void> {
     // ── Branches and their managers ────────────────────────────────────────
     const branchSpecs = [
       {
-        code: 'KBY-IKEJA',
-        name: 'KBY Ikeja',
-        address: 'Ikeja, Lagos',
-        email: 'ikeja@kbyglobal.com',
+        code: 'KBY-BG',
+        name: 'KBY Birnin-Gwari',
+        address: 'Birnin Gwari, Kaduna',
+        email: 'bg@kbyglobal.com',
       },
-      { code: 'KBY-YABA', name: 'KBY Yaba', address: 'Yaba, Lagos', email: 'yaba@kbyglobal.com' },
+      { code: 'KBY-DKA', name: 'KBY Doka', address: 'Doka, Birnin Gwari', email: 'doka@kbyglobal.com' },
       {
-        code: 'KBY-LEKKI',
-        name: 'KBY Lekki',
-        address: 'Lekki, Lagos',
-        email: 'lekki@kbyglobal.com',
+        code: 'KBY-MND',
+        name: 'KBY Mando',
+        address: 'Mando, Birnin Gwari',
+        email: 'mando@kbyglobal.com',
       },
     ];
 
@@ -148,7 +148,7 @@ async function run(dataSource: DataSource): Promise<void> {
       branches.push({ id: branch.id, code: spec.code, name: spec.name });
     }
 
-    const ikeja = branches[0];
+    const bg = branches[0];
 
     // ── Fuel types ─────────────────────────────────────────────────────────
     const fuelTypeSpecs = [
@@ -220,7 +220,7 @@ async function run(dataSource: DataSource): Promise<void> {
     // branches and the Ikeja AGO grade keep opening stock so the dashboard and
     // branch comparison still have something to show.
     const openingBalances: Array<{ branchId: string; fuelTypeId: string; quantity: string }> = [
-      { branchId: ikeja.id, fuelTypeId: fuelTypes.AGO, quantity: '12000' },
+      { branchId: bg.id, fuelTypeId: fuelTypes.AGO, quantity: '12000' },
       { branchId: branches[1].id, fuelTypeId: fuelTypes.PMS, quantity: '8000' },
       { branchId: branches[2].id, fuelTypeId: fuelTypes.PMS, quantity: '6000' },
     ];
@@ -246,7 +246,7 @@ async function run(dataSource: DataSource): Promise<void> {
       orderNumber: `ORD-${year}-000001`,
       businessId,
       supplierId: supplier.id,
-      destinationBranchId: ikeja.id,
+      destinationBranchId: bg.id,
       status: FuelOrderStatus.IN_TRANSIT,
       orderedAt: new Date(`${year}-10-02T09:00:00.000Z`),
       expectedDeliveryAt: new Date(`${year}-10-06T10:00:00.000Z`),
@@ -269,7 +269,7 @@ async function run(dataSource: DataSource): Promise<void> {
       businessId,
       fuelOrderId: order.id,
       tankerId: tanker.id,
-      destinationBranchId: ikeja.id,
+      destinationBranchId: bg.id,
       status: DeliveryStatus.PENDING,
       deliveredAt: null,
       receivedBy: null,
@@ -294,9 +294,9 @@ Seeded ${BUSINESS_NAME}.
   Demo accounts (all share the password ${DEMO_PASSWORD}):
     SUPER_ADMIN  superadmin@kbyglobal.com
     ADMIN        admin@kbyglobal.com
-    MANAGER      ikeja@kbyglobal.com  (KBY Ikeja)
-                 yaba@kbyglobal.com   (KBY Yaba)
-                 lekki@kbyglobal.com  (KBY Lekki)
+    MANAGER      bg@kbyglobal.com  (KBY Birnin-Gwari)
+                 doka@kbyglobal.com   (KBY Doka)
+                 mando@kbyglobal.com  (KBY Mando)
 
   Branches   ${branches.map((b) => b.code).join(', ')}
   Fuel types ${fuelTypeSpecs.map((f) => f.code).join(', ')}

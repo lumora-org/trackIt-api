@@ -39,12 +39,15 @@ export abstract class SoftDeletableEntity extends BaseEntity {
 export const MONEY_PRECISION = { precision: 18, scale: 2 } as const;
 export const QUANTITY_PRECISION = { precision: 18, scale: 3 } as const;
 
-export const MONEY_TYPE = 'numeric(18,2)' as ColumnType;
-export const QUANTITY_TYPE = 'numeric(18,3)' as ColumnType;
+// TypeORM validates column types against its per-driver whitelist at startup,
+// so the NUMERIC modifiers must ride along via the *_PRECISION constants:
+// the type string 'numeric(18,2)' fails validation, while 'numeric' spread
+// with precision/scale renders the same NUMERIC(18,2) in SQL.
+export const MONEY_TYPE = 'numeric' as ColumnType;
+export const QUANTITY_TYPE = 'numeric' as ColumnType;
 
 /**
- * PostgreSQL enum types created by the migration are valid at runtime but are
- * not part of TypeORM's built-in `ColumnType` union, so they are declared here
- * once rather than cast at every call site.
+ * Native PostgreSQL enum types are created by migrations (docs/03). Entity
+ * columns reference them with `type: 'enum'` plus `enumName: '<type_name>'` —
+ * passing the bare type name as `type` fails TypeORM's startup validation.
  */
-export const pgEnum = (typeName: string): ColumnType => typeName as ColumnType;

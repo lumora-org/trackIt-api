@@ -260,6 +260,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
         effective_to TIMESTAMPTZ,
         created_by UUID REFERENCES users(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         CONSTRAINT fuel_prices_price_positive CHECK (price_per_litre > 0),
         CONSTRAINT fuel_prices_interval_ordered CHECK (
           effective_to IS NULL OR effective_to > effective_from
@@ -377,6 +378,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
         expected_quantity_litres NUMERIC(18,3) NOT NULL,
         unit_cost NUMERIC(18,2) NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         CONSTRAINT fuel_order_items_expected_quantity_positive
           CHECK (expected_quantity_litres > 0),
         CONSTRAINT fuel_order_items_unit_cost_positive CHECK (unit_cost > 0)
@@ -427,6 +429,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
         difference_litres NUMERIC(18,3),
         discrepancy_reason TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         -- Actual received quantity may legitimately be zero, never negative.
         CONSTRAINT delivery_items_actual_non_negative
           CHECK (actual_quantity_litres IS NULL OR actual_quantity_litres >= 0),
@@ -466,7 +469,8 @@ export class InitialSchema1700000000000 implements MigrationInterface {
         occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         created_by UUID REFERENCES users(id) ON DELETE SET NULL,
         notes TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )
     `);
     await queryRunner.query(

@@ -81,7 +81,9 @@ export class SalesService {
       .createQueryBuilder('sale')
       .leftJoinAndSelect('sale.fuelType', 'fuelType')
       .where('1 = 1')
-      .orderBy('sale.sold_at', 'DESC')
+      // Property path, not the DB column name: skip/take + joins makes TypeORM
+      // resolve order criteria through entity metadata (see deliveries findAll).
+      .orderBy('sale.soldAt', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

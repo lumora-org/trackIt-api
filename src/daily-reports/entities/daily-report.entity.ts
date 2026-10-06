@@ -7,7 +7,6 @@ import {
   QUANTITY_PRECISION,
   QUANTITY_TYPE,
   BaseEntity,
-  pgEnum,
 } from '../../common/entities/base.entity';
 import { Branch } from '../../branches/entities/branch.entity';
 import { User } from '../../users/entities/user.entity';
@@ -41,7 +40,7 @@ export class DailyReport extends BaseEntity {
   reportDate!: string;
 
   @ApiProperty({ enum: DailyReportStatus })
-  @Column({ type: pgEnum('daily_report_status'), default: DailyReportStatus.DRAFT })
+  @Column({ type: 'enum', enumName: 'daily_report_status', default: DailyReportStatus.DRAFT })
   status!: DailyReportStatus;
 
   @ApiProperty({ example: '10000.000', description: 'Ledger balance before the report date' })

@@ -1,12 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, Index } from 'typeorm';
 import { InventoryTransactionType } from '../../common/enums/fuel.enum';
-import {
-  QUANTITY_PRECISION,
-  QUANTITY_TYPE,
-  BaseEntity,
-  pgEnum,
-} from '../../common/entities/base.entity';
+import { QUANTITY_PRECISION, QUANTITY_TYPE, BaseEntity } from '../../common/entities/base.entity';
 
 /**
  * The append-only inventory ledger — the authoritative record of stock
@@ -42,7 +37,8 @@ export class InventoryTransaction extends BaseEntity {
   @ApiProperty({ enum: InventoryTransactionType })
   @Column({
     name: 'transaction_type',
-    type: pgEnum('inventory_transaction_type'),
+    type: 'enum',
+    enumName: 'inventory_transaction_type',
   })
   transactionType!: InventoryTransactionType;
 

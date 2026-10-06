@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, OneToMany } from 'typeorm';
 import { BusinessStatus } from '../../common/enums/business.enum';
-import { SoftDeletableEntity, pgEnum } from '../../common/entities/base.entity';
+import { SoftDeletableEntity } from '../../common/entities/base.entity';
 import { Branch } from '../../branches/entities/branch.entity';
 
 @Entity({ name: 'businesses' })
@@ -27,7 +27,7 @@ export class Business extends SoftDeletableEntity {
   address!: string | null;
 
   @ApiProperty({ enum: BusinessStatus })
-  @Column({ type: pgEnum('business_status'), default: BusinessStatus.ACTIVE })
+  @Column({ type: 'enum', enumName: 'business_status', default: BusinessStatus.ACTIVE })
   status!: BusinessStatus;
 
   @OneToMany(() => Branch, (branch) => branch.business)

@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { DataSourceOptions } from 'typeorm';
 import { databaseConfig } from './configuration';
+import { ENTITIES } from '../database/entities';
 
 /**
  * Single source of truth for the TypeORM connection so the running app and the
@@ -12,6 +13,9 @@ export function buildDataSourceOptions(config: ConfigService): DataSourceOptions
 
   const shared = {
     type: 'postgres' as const,
+    // Same registry the migration CLI uses (src/database/data-source.ts), so
+    // the running app and the CLI always see an identical schema.
+    entities: ENTITIES,
     // `synchronize` is forbidden in every environment: schema changes must go
     // through reviewed migrations (PROMPT.md §57).
     synchronize: false,

@@ -93,6 +93,8 @@ import { ReportsModule } from './reports/reports.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
+    // Nest 11 (path-to-regexp v8) requires a named wildcard; the bare '*' is
+    // legacy syntax that only auto-converts with a startup warning.
+    consumer.apply(RequestIdMiddleware).forRoutes('{*splat}');
   }
 }

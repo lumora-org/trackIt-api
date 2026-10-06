@@ -11,13 +11,33 @@ import { VALIDATION_PIPE_OPTIONS } from './common/pipes/validation.pipe';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
   const config = app.get(ConfigService);
+  const isProduction = config.get<string>('app.env') === 'production';
 
+  // Every documented endpoint (docs/04, docs/08, docs/09) lives under
+  // /api/v1 — keep this in sync with the Swagger document and the frontend.
   app.setGlobalPrefix('api/v1', { exclude: ['health'] });
 
   app.use(
     helmet({
-      // The API serves JSON and file downloads only, never HTML.
-      contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+      // Production serves JSON and file downloads only, never HTML, so the
+      // tightest policy applies. Non-production also serves the Swagger UI,
+      // whose "Try it out" calls need connect-src (it falls back to
+      // default-src, so 'none' blocks every request with "Failed to fetch")
+      // and break under upgrade-insecure-requests (no TLS listener locally).
+      contentSecurityPolicy: isProduction
+        ? { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } }
+        : {
+            useDefaults: false,
+            directives: {
+              defaultSrc: ["'self'"],
+              scriptSrc: ["'self'"],
+              styleSrc: ["'self'", "'unsafe-inline'"],
+              imgSrc: ["'self'", 'data:'],
+              fontSrc: ["'self'", 'data:'],
+              connectSrc: ["'self'"],
+              frameAncestors: ["'self'"],
+            },
+          },
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
@@ -43,7 +63,7 @@ async function bootstrap(): Promise<void> {
 
   app.enableShutdownHooks();
 
-  if (config.get<string>('app.env') !== 'production') {
+  if (!isProduction) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('trackIt API')
       .setDescription(

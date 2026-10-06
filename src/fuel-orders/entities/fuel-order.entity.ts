@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { FuelOrderStatus } from '../../common/enums/fuel.enum';
-import { BaseEntity, pgEnum } from '../../common/entities/base.entity';
+import { BaseEntity } from '../../common/entities/base.entity';
 import { Business } from '../../businesses/entities/business.entity';
 import { Supplier } from '../../suppliers/entities/supplier.entity';
 import { Branch } from '../../branches/entities/branch.entity';
@@ -33,7 +33,7 @@ export class FuelOrder extends BaseEntity {
   destinationBranchId!: string;
 
   @ApiProperty({ enum: FuelOrderStatus })
-  @Column({ type: pgEnum('fuel_order_status'), default: FuelOrderStatus.DRAFT })
+  @Column({ type: 'enum', enumName: 'fuel_order_status', default: FuelOrderStatus.DRAFT })
   status!: FuelOrderStatus;
 
   @ApiProperty({ nullable: true })

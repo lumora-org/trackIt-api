@@ -174,7 +174,11 @@ export class DeliveriesService {
       .leftJoinAndSelect('delivery.tanker', 'tanker')
       .leftJoinAndSelect('delivery.fuelOrder', 'fuelOrder')
       .where('1 = 1')
-      .orderBy('delivery.created_at', 'DESC')
+      // The two-step skip/take query resolves order criteria through entity
+      // property paths, so this must be `createdAt`, not the DB column name —
+      // an unknown path crashes TypeORM's ORDER BY merge (see fuel-orders/
+      // sales findAll for the same pattern).
+      .orderBy('delivery.createdAt', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

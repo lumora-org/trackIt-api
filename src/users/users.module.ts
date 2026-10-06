@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Branch } from '../branches/entities/branch.entity';
 import { AuthModule } from '../auth/auth.module';
@@ -17,13 +17,13 @@ import { UsersService } from './users.service';
  *
  * AuthModule is imported for PasswordService and TokenService, which the
  * admin write paths need. AuthModule in turn imports UsersModule, so this is a
- * module-level cycle; it resolves at runtime because neither provider reads
- * the other during construction.
+ * module-level cycle; forwardRef() on both sides resolves the imports lazily
+ * (the providers themselves are not circularly dependent).
  */
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, RefreshToken, PasswordResetToken, Branch]),
-    AuthModule,
+    forwardRef(() => AuthModule),
     AuditLogsModule,
   ],
   controllers: [UsersController, MyProfileController],

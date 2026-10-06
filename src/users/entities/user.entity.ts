@@ -1,7 +1,7 @@
 import { ApiHideProperty, ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { AccountStatus, UserRole } from '../../common/enums/user-role.enum';
-import { SoftDeletableEntity, pgEnum } from '../../common/entities/base.entity';
+import { SoftDeletableEntity } from '../../common/entities/base.entity';
 import { Business } from '../../businesses/entities/business.entity';
 import { Branch } from '../../branches/entities/branch.entity';
 
@@ -49,11 +49,11 @@ export class User extends SoftDeletableEntity {
   passwordHash!: string;
 
   @ApiProperty({ enum: UserRole })
-  @Column({ type: pgEnum('user_role') })
+  @Column({ type: 'enum', enumName: 'user_role' })
   role!: UserRole;
 
   @ApiProperty({ enum: AccountStatus })
-  @Column({ type: pgEnum('account_status'), default: AccountStatus.ACTIVE })
+  @Column({ type: 'enum', enumName: 'account_status', default: AccountStatus.ACTIVE })
   status!: AccountStatus;
 
   @ApiProperty({ nullable: true })

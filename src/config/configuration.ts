@@ -19,6 +19,12 @@ const toList = (value: string | undefined, fallback: string[]): string[] => {
   return parsed.length ? parsed : fallback;
 };
 
+/** Anything unrecognised falls back to `lax` rather than failing boot. */
+const toSameSite = (value: string | undefined): 'lax' | 'strict' | 'none' => {
+  const parsed = value?.trim().toLowerCase();
+  return parsed === 'strict' || parsed === 'none' ? parsed : 'lax';
+};
+
 export const appConfig = registerAs('app', () => ({
   env: process.env.NODE_ENV ?? 'development',
   port: toInt(process.env.PORT, 4000),
@@ -53,7 +59,11 @@ export const cookieConfig = registerAs('cookie', () => ({
     process.env.REFRESH_COOKIE_SECURE,
     process.env.NODE_ENV === 'production',
   ),
-  refreshCookieSameSite: 'lax' as const,
+  // `none` is needed when the frontend and API are hosted on different sites
+  // (e.g. app.example.com + api.example.com) so the httpOnly refresh cookie
+  // still round-trips on cross-site XHR; browsers require a secure cookie
+  // alongside it. Same-host proxy deployments keep the safer `lax`.
+  refreshCookieSameSite: toSameSite(process.env.REFRESH_COOKIE_SAMESITE),
   refreshCookiePath: '/',
 }));
 

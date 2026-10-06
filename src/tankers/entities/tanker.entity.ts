@@ -5,7 +5,6 @@ import {
   QUANTITY_PRECISION,
   QUANTITY_TYPE,
   SoftDeletableEntity,
-  pgEnum,
 } from '../../common/entities/base.entity';
 import { Business } from '../../businesses/entities/business.entity';
 
@@ -39,7 +38,7 @@ export class Tanker extends SoftDeletableEntity {
   driverPhone!: string | null;
 
   @ApiProperty({ enum: AccountStatus })
-  @Column({ type: pgEnum('account_status'), default: AccountStatus.ACTIVE })
+  @Column({ type: 'enum', enumName: 'account_status', default: AccountStatus.ACTIVE })
   status!: AccountStatus;
 
   @ManyToOne(() => Business, { onDelete: 'RESTRICT' })
