@@ -11,6 +11,8 @@ import { DecimalMath } from '../common/utils/money.util';
 import { resolveDateRange } from '../common/utils/date.util';
 import { AuditAction, AuditResourceType, AuditService } from '../audit-logs/audit-logs.service';
 import { FuelTypesService } from '../fuel-types/fuel-types.service';
+import { NotificationType } from '../common/enums/notification.enum';
+import { NotificationsService } from '../notifications/notifications.service';
 import { FuelPrice } from './entities/fuel-price.entity';
 import { CreateFuelPriceDto, ListFuelPricesQueryDto } from './dto/fuel-price.dto';
 import { CurrentFuelPriceDto, FuelPriceResponseDto } from './dto/fuel-price-response.dto';
@@ -27,6 +29,7 @@ export class FuelPricesService {
     private readonly authorization: AuthorizationService,
     private readonly fuelTypes: FuelTypesService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -105,7 +108,10 @@ export class FuelPricesService {
     query: ListFuelPricesQueryDto,
     actor: AuthenticatedUser,
   ): Promise<PaginatedResult<FuelPriceResponseDto>> {
-    const businessId = this.authorization.resolveBusinessScope(actor);
+    // A SUPER_ADMIN may scope the list to one business; others are clamped to
+    // their own. A platform-wide price list is still rejected — intervals are
+    // only meaningful inside one business.
+    const businessId = this.authorization.resolveBusinessScope(actor, query.businessId ?? null);
     if (!businessId) throw notFound('No business context is available.');
 
     const builder = this.repository
@@ -289,6 +295,33 @@ export class FuelPricesService {
             previousPricePerLitre: openInterval?.pricePerLitre ?? null,
           },
           newValues: this.toResponse(saved) as unknown as Record<string, unknown>,
+        },
+        manager,
+      );
+
+      // Price changes affect every branch's sales immediately, so the admins
+      // AND the branch managers are alerted — inside the same transaction so
+      // the alert cannot be lost if the price write were to roll back.
+      const priceMessage = `${fuelType.code} is now ${saved.pricePerLitre} per litre, effective ${saved.effectiveFrom.toISOString().slice(0, 10)}.`;
+      await this.notifications.notifyBusinessAdmins(
+        businessId,
+        {
+          type: NotificationType.FUEL_PRICE_UPDATE,
+          title: `Fuel price updated: ${fuelType.code}`,
+          message: priceMessage,
+          resourceType: 'FUEL_PRICE',
+          resourceId: saved.id,
+        },
+        manager,
+      );
+      await this.notifications.notifyBusinessManagers(
+        businessId,
+        {
+          type: NotificationType.FUEL_PRICE_UPDATE,
+          title: `Fuel price updated: ${fuelType.code}`,
+          message: priceMessage,
+          resourceType: 'FUEL_PRICE',
+          resourceId: saved.id,
         },
         manager,
       );

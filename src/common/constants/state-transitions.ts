@@ -58,11 +58,10 @@ export const DAILY_REPORT_TRANSITIONS: Readonly<
 export const canTransitionDailyReport = (from: DailyReportStatus, to: DailyReportStatus): boolean =>
   DAILY_REPORT_TRANSITIONS[from].includes(to);
 
-/** Legal delivery transitions (PROMPT-B.E §3). */
+/** Legal delivery transitions (PROMPT-B.E §3; DISPUTED removed by product decision). */
 export const DELIVERY_TRANSITIONS: Readonly<Record<DeliveryStatus, readonly DeliveryStatus[]>> = {
-  PENDING: [DeliveryStatus.RECEIVED, DeliveryStatus.DISPUTED, DeliveryStatus.CANCELLED],
+  PENDING: [DeliveryStatus.RECEIVED, DeliveryStatus.CANCELLED],
   RECEIVED: [],
-  DISPUTED: [],
   CANCELLED: [],
 };
 

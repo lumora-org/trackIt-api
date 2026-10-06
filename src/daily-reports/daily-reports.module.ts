@@ -4,9 +4,11 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { BranchesModule } from '../branches/branches.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { Branch } from '../branches/entities/branch.entity';
 import { DailyReport } from './entities/daily-report.entity';
 import { DailyReportsController } from './daily-reports.controller';
 import { DailyReportsService } from './daily-reports.service';
+import { DailyReportReminderService } from './daily-report-reminder.service';
 
 /**
  * Daily reports READ from the ledger and sales tables and never write to
@@ -15,14 +17,14 @@ import { DailyReportsService } from './daily-reports.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([DailyReport]),
+    TypeOrmModule.forFeature([DailyReport, Branch]),
     AuditLogsModule,
     BranchesModule,
     InventoryModule,
     NotificationsModule,
   ],
   controllers: [DailyReportsController],
-  providers: [DailyReportsService],
+  providers: [DailyReportsService, DailyReportReminderService],
   exports: [DailyReportsService],
 })
 export class DailyReportsModule {}

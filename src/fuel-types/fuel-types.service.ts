@@ -42,7 +42,9 @@ export class FuelTypesService {
     query: ListFuelTypesQueryDto,
     actor: AuthenticatedUser,
   ): Promise<PaginatedResult<FuelTypeResponseDto>> {
-    const businessId = this.authorization.resolveBusinessScope(actor);
+    // A SUPER_ADMIN may scope the list to one business; others are clamped
+    // to their own (docs/08 §70).
+    const businessId = this.authorization.resolveBusinessScope(actor, query.businessId ?? null);
 
     const builder = this.repository
       .createQueryBuilder('fuelType')

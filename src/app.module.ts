@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { IdempotencyInterceptor } from './idempotency/idempotency.interceptor';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -58,6 +59,9 @@ import { ReportsModule } from './reports/reports.module';
         },
       ],
     }),
+
+    // Drives the daily-report reminder cron (daily-reports module).
+    ScheduleModule.forRoot(),
 
     CommonModule,
     HealthModule,

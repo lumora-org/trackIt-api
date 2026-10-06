@@ -18,7 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { DeliveriesService } from './deliveries.service';
 import { ListDeliveriesQueryDto } from './dto/delivery.dto';
-import { DisputeDeliveryDto, ReceiveDeliveryDto } from './dto/receive-delivery.dto';
+import { ReceiveDeliveryDto } from './dto/receive-delivery.dto';
 import { DeliveryResponseDto } from './dto/delivery-response.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Idempotent } from '../common/decorators/idempotent.decorator';
@@ -85,24 +85,5 @@ export class DeliveriesController {
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<DeliveryResponseDto> {
     return this.deliveries.receive(id, dto, actor, { userId: actor.id });
-  }
-
-  @Post(':id/dispute')
-  @Idempotent()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Dispute a delivery',
-    description:
-      'Moves the delivery to DISPUTED with no inventory movement, because ' +
-      'receiving is what posts stock. A reason is mandatory.',
-  })
-  @ApiOkResponse({ type: DeliveryResponseDto })
-  @ApiUnprocessableEntityResponse({ type: ApiErrorResponse })
-  async dispute(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: DisputeDeliveryDto,
-    @CurrentUser() actor: AuthenticatedUser,
-  ): Promise<DeliveryResponseDto> {
-    return this.deliveries.dispute(id, dto, actor, { userId: actor.id });
   }
 }

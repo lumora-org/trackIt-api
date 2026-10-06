@@ -132,6 +132,16 @@ export class ListUsersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'SUPER_ADMIN only: scope the list to one business. ' +
+      'Other roles are always clamped to their own business.',
+  })
+  @IsOptional()
+  @IsUUID()
+  businessId?: string;
 }
 
 /**

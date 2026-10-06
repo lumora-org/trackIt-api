@@ -113,9 +113,11 @@ export class UsersController {
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  // Product decision: suspending accounts is a business-admin duty; the
+  // platform role manages businesses only.
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: 'Activate, deactivate or suspend an account',
+    summary: 'Activate, deactivate or suspend an account (ADMIN only)',
     description:
       'Leaving ACTIVE revokes every refresh session for that account so the ' +
       'change takes effect immediately.',
@@ -132,9 +134,10 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  // Product decision: removing accounts is a business-admin duty.
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: 'Soft-remove a user',
+    summary: 'Soft-remove a user (ADMIN only)',
     description:
       'A deliberate extension beyond docs/04 required by the Users page. ' +
       'Suspension via PATCH /users/:id/status remains the recommended flow.',

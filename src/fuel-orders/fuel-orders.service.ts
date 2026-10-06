@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { FuelOrderStatus } from '../common/enums/fuel.enum';
+import { NotificationType } from '../common/enums/notification.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { AuthorizationService } from '../common/services/authorization.service';
@@ -22,6 +23,7 @@ import { SuppliersService } from '../suppliers/suppliers.service';
 import { TankersService } from '../tankers/tankers.service';
 import { FuelTypesService } from '../fuel-types/fuel-types.service';
 import { DeliveriesService } from '../deliveries/deliveries.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { FuelOrder } from './entities/fuel-order.entity';
 import { FuelOrderItem } from './entities/fuel-order-item.entity';
 import {
@@ -45,6 +47,7 @@ export class FuelOrdersService {
     private readonly tankers: TankersService,
     private readonly fuelTypes: FuelTypesService,
     private readonly deliveries: DeliveriesService,
+    private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
   ) {}
@@ -326,7 +329,7 @@ export class FuelOrdersService {
           .where('item.fuel_order_id = :id', { id })
           .getMany();
 
-        await this.deliveries.createPendingForOrder(
+        const delivery = await this.deliveries.createPendingForOrder(
           {
             id: locked.id,
             businessId: locked.businessId,
@@ -340,6 +343,35 @@ export class FuelOrdersService {
             })),
           },
           tanker?.id ?? null,
+          manager,
+        );
+
+        // Delivery alert: the destination branch's managers and the business
+        // admins learn that fuel is on the way, in the same transaction. The
+        // branch name comes from the already-loaded relation — no extra query,
+        // and an inactive branch can never fail the transition here.
+        const branchName = order.destinationBranch?.name ?? 'the destination branch';
+        await this.notifications.notifyBranchManagers(
+          locked.businessId,
+          locked.destinationBranchId,
+          {
+            type: NotificationType.DELIVERY_IN_TRANSIT,
+            title: `Order ${locked.orderNumber} is on the way`,
+            message: `A tanker is in transit to ${branchName}.`,
+            resourceType: 'DELIVERY',
+            resourceId: delivery.id,
+          },
+          manager,
+        );
+        await this.notifications.notifyBusinessAdmins(
+          locked.businessId,
+          {
+            type: NotificationType.DELIVERY_IN_TRANSIT,
+            title: `Order ${locked.orderNumber} is in transit`,
+            message: `Fuel is in transit to ${branchName}.`,
+            resourceType: 'FUEL_ORDER',
+            resourceId: locked.id,
+          },
           manager,
         );
       }

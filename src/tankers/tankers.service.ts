@@ -40,7 +40,9 @@ export class TankersService {
     query: ListTankersQueryDto,
     actor: AuthenticatedUser,
   ): Promise<PaginatedResult<TankerResponseDto>> {
-    const businessId = this.authorization.resolveBusinessScope(actor);
+    // A SUPER_ADMIN may scope the list to one business; others are clamped
+    // to their own.
+    const businessId = this.authorization.resolveBusinessScope(actor, query.businessId ?? null);
 
     const builder = this.repository
       .createQueryBuilder('tanker')

@@ -52,12 +52,12 @@ export class BranchesController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  // Product decision: branch lifecycle belongs to the business ADMIN; the
+  // platform role manages businesses as a whole.
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: 'Create a branch',
-    description:
-      'businessId is always derived from the caller. A SUPER_ADMIN has no ' +
-      'business of their own, so the target must be supplied explicitly.',
+    summary: 'Create a branch (ADMIN only)',
+    description: 'businessId is always derived from the caller.',
   })
   @ApiCreatedResponse({ type: BranchResponseDto })
   async create(
@@ -69,9 +69,11 @@ export class BranchesController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  // Includes deactivation — the way a branch is "deleted" — so it stays
+  // ADMIN-only for the same reason as POST above.
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: 'Update a branch, including activation and deactivation',
+    summary: 'Update a branch, including activation and deactivation (ADMIN only)',
     description:
       'There is deliberately no separate status endpoint; sending ' +
       '`status` here is how a branch is activated or deactivated.',

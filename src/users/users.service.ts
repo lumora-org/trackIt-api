@@ -137,7 +137,9 @@ export class UsersService {
     query: ListUsersQueryDto,
     actor: AuthenticatedUser,
   ): Promise<PaginatedResult<UserResponseDto>> {
-    const businessId = this.authorization.resolveBusinessScope(actor);
+    // A SUPER_ADMIN may scope the list to one business; others are clamped
+    // to their own (doc 04 §17).
+    const businessId = this.authorization.resolveBusinessScope(actor, query.businessId ?? null);
 
     const builder = this.users
       .raw()

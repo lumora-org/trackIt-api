@@ -17,6 +17,17 @@ export class AdminDashboardQueryDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'SUPER_ADMIN only: scope the overview to one business. ' +
+      'Omitted, the overview aggregates every business on the platform. ' +
+      'Other roles are always clamped to their own business.',
+  })
+  @IsOptional()
+  @IsUUID()
+  businessId?: string;
 }
 
 export class DashboardSummaryDto {
@@ -37,6 +48,12 @@ export class DashboardSummaryDto {
 }
 
 export class BranchPerformanceDto {
+  @ApiProperty({ format: 'uuid', description: 'Business the branch belongs to' })
+  businessId!: string;
+
+  @ApiProperty({ example: 'K.B.Y GLOBAL INVESTMENT' })
+  businessName!: string;
+
   @ApiProperty({ format: 'uuid' })
   branchId!: string;
 

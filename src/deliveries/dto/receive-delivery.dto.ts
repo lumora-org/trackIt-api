@@ -10,7 +10,6 @@ import {
   IsUUID,
   MaxLength,
   Min,
-  MinLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -45,14 +44,4 @@ export class ReceiveDeliveryDto {
   @ValidateNested({ each: true })
   @Type(() => ReceiveDeliveryItemDto)
   items!: ReceiveDeliveryItemDto[];
-}
-
-export class DisputeDeliveryDto {
-  @ApiProperty({
-    example: 'Received quantity differs significantly from the supplier documents.',
-  })
-  @IsString()
-  @MinLength(3, { message: 'a dispute reason is required and must be meaningful' })
-  @MaxLength(2000)
-  reason!: string;
 }

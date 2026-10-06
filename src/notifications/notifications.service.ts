@@ -55,30 +55,20 @@ export class NotificationsService {
     );
   }
 
-  /** Fans a notification out to every active ADMIN of a business. */
-  async notifyBusinessAdmins(
-    businessId: string,
+  /**
+   * Shared row-fan-out used by the role helpers: saves one notification per
+   * recipient id without re-querying.
+   */
+  private async saveMany(
+    repository: Repository<Notification>,
+    businessId: string | null,
+    recipientIds: string[],
     request: NotificationRequest,
-    manager?: EntityManager,
-  ): Promise<number> {
-    const repository = manager ? manager.getRepository(Notification) : this.repository;
-
-    const recipients = await repository.manager
-      .createQueryBuilder()
-      .select('user.id', 'id')
-      .from('users', 'user')
-      .where('user.business_id = :businessId', { businessId })
-      .andWhere('user.role = :role', { role: UserRole.ADMIN })
-      .andWhere('user.status = :status', { status: AccountStatus.ACTIVE })
-      .andWhere('user.deleted_at IS NULL')
-      .getRawMany<{ id: string }>();
-
-    if (recipients.length === 0) return 0;
-
+  ): Promise<void> {
     await repository.save(
-      recipients.map((recipient) =>
+      recipientIds.map((userId) =>
         repository.create({
-          userId: recipient.id,
+          userId,
           businessId,
           type: request.type,
           title: request.title,
@@ -90,7 +80,86 @@ export class NotificationsService {
         }),
       ),
     );
+  }
 
+  /** Fans a notification out to every active ADMIN of a business. */
+  async notifyBusinessAdmins(
+    businessId: string,
+    request: NotificationRequest,
+    manager?: EntityManager,
+  ): Promise<number> {
+    return this.notifyBusinessRole(businessId, UserRole.ADMIN, request, manager);
+  }
+
+  /** Fans a notification out to every active MANAGER of a business. */
+  async notifyBusinessManagers(
+    businessId: string,
+    request: NotificationRequest,
+    manager?: EntityManager,
+  ): Promise<number> {
+    return this.notifyBusinessRole(businessId, UserRole.MANAGER, request, manager);
+  }
+
+  /**
+   * Fans a notification out to the active MANAGERs of one branch — used for
+   * delivery and daily-report alerts, which are branch-scoped events.
+   */
+  async notifyBranchManagers(
+    businessId: string,
+    branchId: string,
+    request: NotificationRequest,
+    manager?: EntityManager,
+  ): Promise<number> {
+    const repository = manager ? manager.getRepository(Notification) : this.repository;
+
+    const recipients = await repository.manager
+      .createQueryBuilder()
+      .select('user.id', 'id')
+      .from('users', 'user')
+      .where('user.business_id = :businessId', { businessId })
+      .andWhere('user.branch_id = :branchId', { branchId })
+      .andWhere('user.role = :role', { role: UserRole.MANAGER })
+      .andWhere('user.status = :status', { status: AccountStatus.ACTIVE })
+      .andWhere('user.deleted_at IS NULL')
+      .getRawMany<{ id: string }>();
+
+    if (recipients.length === 0) return 0;
+
+    await this.saveMany(
+      repository,
+      businessId,
+      recipients.map((r) => r.id),
+      request,
+    );
+    return recipients.length;
+  }
+
+  private async notifyBusinessRole(
+    businessId: string,
+    role: UserRole,
+    request: NotificationRequest,
+    manager?: EntityManager,
+  ): Promise<number> {
+    const repository = manager ? manager.getRepository(Notification) : this.repository;
+
+    const recipients = await repository.manager
+      .createQueryBuilder()
+      .select('user.id', 'id')
+      .from('users', 'user')
+      .where('user.business_id = :businessId', { businessId })
+      .andWhere('user.role = :role', { role })
+      .andWhere('user.status = :status', { status: AccountStatus.ACTIVE })
+      .andWhere('user.deleted_at IS NULL')
+      .getRawMany<{ id: string }>();
+
+    if (recipients.length === 0) return 0;
+
+    await this.saveMany(
+      repository,
+      businessId,
+      recipients.map((r) => r.id),
+      request,
+    );
     return recipients.length;
   }
 

@@ -57,15 +57,16 @@ export class DashboardsService {
    * from/to narrow the movement and revenue window only. Current-stock figures
    * are always "now", because stock is a point-in-time balance rather than a
    * period total.
+   *
+   * A SUPER_ADMIN may scope the overview to one business via `businessId`;
+   * without it the figures aggregate every business on the platform. Other
+   * roles are clamped to their own business by the authorization service.
    */
   async adminDashboard(
     query: AdminDashboardQueryDto,
     actor: AuthenticatedUser,
   ): Promise<AdminDashboardDto> {
-    const businessId = this.authorization.resolveBusinessScope(actor);
-    if (!businessId) {
-      throw apiError(ErrorCode.BUSINESS_ACCESS_DENIED, 'A business context is required.');
-    }
+    const businessId = this.authorization.resolveBusinessScope(actor, query.businessId ?? null);
 
     // A MANAGER is pinned to their own branch whatever they requested.
     const branchId = this.authorization.resolveBranchScope(actor, query.branchId);
@@ -196,15 +197,26 @@ export class DashboardsService {
     };
   }
 
+  /**
+   * Per-branch sales performance for an optional business and window.
+   *
+   * A null `businessId` means the platform-wide view: branches of every
+   * business appear, each tagged with its business name so the caller can tell
+   * them apart.
+   */
   private async branchPerformance(
-    businessId: string,
+    businessId: string | null,
     branchId: string | null,
     start: Date | null,
     end: Date | null,
   ): Promise<BranchPerformanceDto[]> {
-    const params: unknown[] = [businessId];
+    const params: unknown[] = [];
     const filters: string[] = [];
 
+    if (businessId) {
+      filters.push(`branch.business_id = $${params.length + 1}`);
+      params.push(businessId);
+    }
     if (branchId) {
       filters.push(`sale.branch_id = $${params.length + 1}`);
       params.push(branchId);
@@ -221,24 +233,36 @@ export class DashboardsService {
     // A LEFT JOIN keeps branches with no sales in the table, showing zeros,
     // rather than silently omitting them from the comparison.
     const rows = await this.dataSource.query(
-      `SELECT branch.id                          AS branch_id,
-              branch.name                        AS branch_name,
-              COALESCE(SUM(sale.litres_sold), 0) AS litres_sold,
+      `SELECT branch.id                           AS branch_id,
+              branch.business_id                  AS business_id,
+              branch.name                         AS branch_name,
+              business.name                       AS business_name,
+              COALESCE(SUM(sale.litres_sold), 0)  AS litres_sold,
               COALESCE(SUM(sale.total_amount), 0) AS revenue
          FROM branches branch
+         JOIN businesses business
+           ON business.id = branch.business_id
          LEFT JOIN sales sale
            ON sale.branch_id = branch.id
           AND sale.voided_at IS NULL
           ${filters.length ? `AND ${filters.join(' AND ')}` : ''}
-        WHERE branch.business_id = $1
-          AND branch.deleted_at IS NULL
-        GROUP BY branch.id, branch.name
-        ORDER BY branch.name ASC`,
+        WHERE branch.deleted_at IS NULL
+        GROUP BY branch.id, branch.name, branch.business_id, business.name
+        ORDER BY business.name ASC, branch.name ASC`,
       params,
     );
 
     return rows.map(
-      (row: { branch_id: string; branch_name: string; litres_sold: string; revenue: string }) => ({
+      (row: {
+        branch_id: string;
+        business_id: string;
+        business_name: string;
+        branch_name: string;
+        litres_sold: string;
+        revenue: string;
+      }) => ({
+        businessId: row.business_id,
+        businessName: row.business_name,
         branchId: row.branch_id,
         branchName: row.branch_name,
         fuelSoldLitres: this.quantity(row.litres_sold),
@@ -247,17 +271,20 @@ export class DashboardsService {
     );
   }
 
-  private async countBranches(businessId: string, branchId: string | null): Promise<number> {
-    const params: unknown[] = [businessId];
-    let filter = '';
+  private async countBranches(businessId: string | null, branchId: string | null): Promise<number> {
+    const params: unknown[] = [];
+    const parts: string[] = ['deleted_at IS NULL'];
+    if (businessId) {
+      params.push(businessId);
+      parts.push(`business_id = $${params.length}`);
+    }
     if (branchId) {
-      filter = ` AND id = $${params.length + 1}`;
       params.push(branchId);
+      parts.push(`id = $${params.length}`);
     }
 
     const rows = await this.dataSource.query(
-      `SELECT COUNT(1) AS count FROM branches
-        WHERE business_id = $1 AND deleted_at IS NULL${filter}`,
+      `SELECT COUNT(1) AS count FROM branches WHERE ${parts.join(' AND ')}`,
       params,
     );
 
@@ -273,22 +300,26 @@ export class DashboardsService {
    * (LOW_INVENTORY_THRESHOLD_LITRES) rather than a hard-coded number.
    */
   private async countLowInventoryBranches(
-    businessId: string,
+    businessId: string | null,
     branchId: string | null,
   ): Promise<number> {
-    const params: unknown[] = [businessId, this.lowStockThreshold];
-    let filter = '';
-    if (branchId) {
-      filter = ` AND b.id = $${params.length + 1}`;
-      params.push(branchId);
+    const params: unknown[] = [];
+    const parts: string[] = ['b.deleted_at IS NULL'];
+    if (businessId) {
+      params.push(businessId);
+      parts.push(`b.business_id = $${params.length}`);
     }
+    if (branchId) {
+      params.push(branchId);
+      parts.push(`b.id = $${params.length}`);
+    }
+    params.push(this.lowStockThreshold);
+    const threshold = `$${params.length}`;
 
     const rows = await this.dataSource.query(
       `SELECT b.id
          FROM branches b
-        WHERE b.business_id = $1
-          AND b.deleted_at IS NULL
-          ${filter}
+        WHERE ${parts.join(' AND ')}
           AND EXISTS (
             SELECT 1
               FROM fuel_types ft
@@ -299,7 +330,7 @@ export class DashboardsService {
                        FROM inventory_transactions tx
                       WHERE tx.branch_id = b.id
                         AND tx.fuel_type_id = ft.id
-                   ), 0) <= $2::numeric
+                   ), 0) <= ${threshold}::numeric
           )
         GROUP BY b.id`,
       params,

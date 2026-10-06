@@ -8,10 +8,14 @@ export enum FuelOrderStatus {
   CANCELLED = 'CANCELLED',
 }
 
+/**
+ * DISPUTED was removed from the workflow: a delivery is either received into
+ * stock or cancelled. (The `delivery_status` DB enum still carries the
+ * historical value; nothing writes it any more.)
+ */
 export enum DeliveryStatus {
   PENDING = 'PENDING',
   RECEIVED = 'RECEIVED',
-  DISPUTED = 'DISPUTED',
   CANCELLED = 'CANCELLED',
 }
 

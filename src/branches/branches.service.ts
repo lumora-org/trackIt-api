@@ -42,7 +42,9 @@ export class BranchesService {
     query: ListBranchesQueryDto,
     actor: AuthenticatedUser,
   ): Promise<PaginatedResult<BranchResponseDto>> {
-    const businessId = this.authorization.resolveBusinessScope(actor);
+    // A SUPER_ADMIN may scope the list to one business; others are clamped
+    // to their own (doc 04 §21.1).
+    const businessId = this.authorization.resolveBusinessScope(actor, query.businessId ?? null);
     const forcedBranchId = this.authorization.resolveBranchScope(actor);
 
     const builder = this.repository

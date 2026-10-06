@@ -110,7 +110,12 @@ async function run(dataSource: DataSource): Promise<void> {
         address: 'Birnin Gwari, Kaduna',
         email: 'bg@kbyglobal.com',
       },
-      { code: 'KBY-DKA', name: 'KBY Doka', address: 'Doka, Birnin Gwari', email: 'doka@kbyglobal.com' },
+      {
+        code: 'KBY-DKA',
+        name: 'KBY Doka',
+        address: 'Doka, Birnin Gwari',
+        email: 'doka@kbyglobal.com',
+      },
       {
         code: 'KBY-MND',
         name: 'KBY Mando',

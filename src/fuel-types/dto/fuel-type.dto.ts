@@ -1,6 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { AccountStatus } from '../../common/enums/user-role.enum';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 
@@ -62,4 +70,14 @@ export class ListFuelTypesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(AccountStatus)
   status?: AccountStatus;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'SUPER_ADMIN only: scope the list to one business. ' +
+      'Other roles are always clamped to their own business.',
+  })
+  @IsOptional()
+  @IsUUID()
+  businessId?: string;
 }

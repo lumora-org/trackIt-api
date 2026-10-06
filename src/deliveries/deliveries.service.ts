@@ -22,7 +22,7 @@ import { Delivery } from './entities/delivery.entity';
 import { DeliveryItem } from './entities/delivery-item.entity';
 import { DeliveryItemResponseDto, DeliveryResponseDto } from './dto/delivery-response.dto';
 import { ListDeliveriesQueryDto } from './dto/delivery.dto';
-import { DisputeDeliveryDto, ReceiveDeliveryDto } from './dto/receive-delivery.dto';
+import { ReceiveDeliveryDto } from './dto/receive-delivery.dto';
 import { DeliveryGeneratorService } from './services/delivery-number.service';
 
 /**
@@ -425,6 +425,20 @@ export class DeliveriesService {
         manager,
       );
 
+      // The receiving branch's managers get the same alert in their own feed.
+      await this.notifications.notifyBranchManagers(
+        locked.businessId,
+        locked.destinationBranchId,
+        {
+          type: NotificationType.DELIVERY_RECEIVED,
+          title: `Delivery ${locked.deliveryNumber ?? locked.id.slice(0, 8)} received`,
+          message: `Fuel received into branch inventory.`,
+          resourceType: 'DELIVERY',
+          resourceId: locked.id,
+        },
+        manager,
+      );
+
       if (anyDiscrepancy) {
         await this.notifications.notifyBusinessAdmins(
           locked.businessId,
@@ -447,72 +461,6 @@ export class DeliveriesService {
     );
 
     return this.toResponse(result);
-  }
-
-  /**
-   * Raises a dispute. A disputed delivery moves NO inventory: receiving it is
-   * the operation that posts stock, so disputing is how a branch rejects a
-   * quantity before any ledger row exists (PROMPT-B.E §4.10).
-   */
-  async dispute(
-    id: string,
-    dto: DisputeDeliveryDto,
-    actor: AuthenticatedUser,
-    auditActor: AuditActorLike,
-  ): Promise<DeliveryResponseDto> {
-    const delivery = await this.findOneOrFail(id, actor);
-    this.assertPending(delivery);
-
-    return this.dataSource.transaction(async (manager) => {
-      const repository = manager.getRepository(Delivery);
-
-      const locked = await repository
-        .createQueryBuilder('delivery')
-        .setLock('pessimistic_write')
-        .where('delivery.id = :id', { id })
-        .getOneOrFail();
-
-      if (!canTransitionDelivery(locked.status, DeliveryStatus.DISPUTED)) {
-        throw apiError(
-          ErrorCode.INVALID_DELIVERY_STATUS,
-          `This delivery is already ${this.describeStatus(locked.status)}.`,
-        );
-      }
-
-      locked.status = DeliveryStatus.DISPUTED;
-      locked.disputeReason = dto.reason.trim();
-      await repository.save(locked);
-
-      await this.audit.record(
-        {
-          ...auditActor,
-          userId: actor.id,
-          businessId: locked.businessId,
-          branchId: locked.destinationBranchId,
-        },
-        {
-          action: AuditAction.DELIVERY_DISPUTED,
-          resourceType: AuditResourceType.DELIVERY,
-          resourceId: locked.id,
-          metadata: { reason: dto.reason.trim() },
-        },
-        manager,
-      );
-
-      await this.notifications.notifyBusinessAdmins(
-        locked.businessId,
-        {
-          type: NotificationType.DELIVERY_DISCREPANCY,
-          title: `Delivery ${locked.deliveryNumber ?? locked.id.slice(0, 8)} disputed`,
-          message: dto.reason.trim(),
-          resourceType: 'DELIVERY',
-          resourceId: locked.id,
-        },
-        manager,
-      );
-
-      return this.toResponse(locked);
-    });
   }
 
   /**
@@ -583,8 +531,6 @@ export class DeliveriesService {
         return 'pending';
       case DeliveryStatus.RECEIVED:
         return 'received';
-      case DeliveryStatus.DISPUTED:
-        return 'disputed';
       case DeliveryStatus.CANCELLED:
         return 'cancelled';
       default:

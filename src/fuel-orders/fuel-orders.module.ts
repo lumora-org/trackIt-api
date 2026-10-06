@@ -6,6 +6,7 @@ import { SuppliersModule } from '../suppliers/suppliers.module';
 import { TankersModule } from '../tankers/tankers.module';
 import { FuelTypesModule } from '../fuel-types/fuel-types.module';
 import { DeliveriesModule } from '../deliveries/deliveries.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { FuelOrder } from './entities/fuel-order.entity';
 import { FuelOrderItem } from './entities/fuel-order-item.entity';
 import { FuelOrdersController } from './fuel-orders.controller';
@@ -20,6 +21,7 @@ import { FuelOrdersService } from './fuel-orders.service';
     TankersModule,
     FuelTypesModule,
     DeliveriesModule,
+    NotificationsModule,
   ],
   controllers: [FuelOrdersController],
   providers: [FuelOrdersService],

@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   MinLength,
@@ -110,4 +111,14 @@ export class ListSuppliersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(AccountStatus)
   status?: AccountStatus;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'SUPER_ADMIN only: scope the list to one business. ' +
+      'Other roles are always clamped to their own business.',
+  })
+  @IsOptional()
+  @IsUUID()
+  businessId?: string;
 }
