@@ -60,7 +60,9 @@ export class DashboardsService {
    *
    * A SUPER_ADMIN may scope the overview to one business via `businessId`;
    * without it the figures aggregate every business on the platform. Other
-   * roles are clamped to their own business by the authorization service.
+   * roles are clamped to their own business by the authorization service. A
+   * `branchId` narrows every figure — summary and branch list alike — to that
+   * one branch.
    */
   async adminDashboard(
     query: AdminDashboardQueryDto,
@@ -74,7 +76,7 @@ export class DashboardsService {
     const start = range?.start ?? null;
     const end = range?.end ?? null;
 
-    const totals = await this.movementTotals(branchId, start, end);
+    const totals = await this.movementTotals(businessId, branchId, start, end);
     const branches = await this.branchPerformance(businessId, branchId, start, end);
 
     return {
@@ -115,61 +117,84 @@ export class DashboardsService {
     const dayStart = startOfDayInTimeZone(today, this.businessTimezone);
     const dayEnd = endOfDayInTimeZone(today, this.businessTimezone);
 
-    const todayTotals = await this.movementTotals(branchId, dayStart, dayEnd);
+    const todayTotals = await this.movementTotals(actor.businessId, branchId, dayStart, dayEnd);
 
-    const reportRows = await this.dataSource.query(
-      `SELECT status FROM daily_reports WHERE branch_id = $1 AND report_date = $2`,
-      [branchId, today],
+    // Under the day-total model the manager's obligation is to record the
+    // branch's sales for the day; the dashboard nudges when nothing has been
+    // recorded yet (the daily-report workflow is gone from the UI).
+    const recordedRows = await this.dataSource.query(
+      `SELECT EXISTS (
+         SELECT 1
+           FROM sales
+          WHERE branch_id = $1
+            AND voided_at IS NULL
+            AND sold_at >= $2
+            AND sold_at < $3
+       ) AS recorded`,
+      [branchId, dayStart, dayEnd],
     );
 
     return {
       branch: { id: branch.id, name: branch.name },
       inventory,
       today: { litresSold: todayTotals.sold, revenue: todayTotals.revenue },
-      dailyReport: reportRows[0] ? { status: reportRows[0].status } : null,
+      salesRecordedToday: Boolean(recordedRows[0]?.recorded),
     };
   }
 
   /**
-   * Volumes received and sold plus revenue for an optional branch and window.
+   * Volumes received and sold plus revenue for an optional business, branch
+   * and window.
+   *
+   * The business filter is what keeps an ADMIN's overview inside their own
+   * tenant when no branch is selected; a branch narrows it to that branch.
+   * Both tables carry business_id (indexed with branch_id), so each predicate
+   * binds its own column.
    *
    * SALE ledger rows are negative, so litres sold is negated back to a positive
    * quantity here — the same sign correction the daily report performs.
    */
   async movementTotals(
+    businessId: string | null,
     branchId: string | null,
     start: Date | null,
     end: Date | null,
   ): Promise<MovementTotals> {
     const params: unknown[] = [];
-    const clause = (column: string) => {
-      const parts: string[] = [];
-      if (branchId) {
-        parts.push(`${column} = $${params.length + 1}`);
-        params.push(branchId);
-      }
-      if (start) {
-        parts.push(`${column} >= $${params.length + 1}`);
-        params.push(start);
-      }
-      if (end) {
-        parts.push(`${column} <= $${params.length + 1}`);
-        params.push(end);
-      }
-      return parts.length ? ` AND ${parts.join(' AND ')}` : '';
-    };
+    const parts: string[] = [];
+    if (businessId) {
+      parts.push(`business_id = $${params.length + 1}`);
+      params.push(businessId);
+    }
+    if (branchId) {
+      parts.push(`branch_id = $${params.length + 1}`);
+      params.push(branchId);
+    }
+    if (start) {
+      parts.push(`occurred_at >= $${params.length + 1}`);
+      params.push(start);
+    }
+    if (end) {
+      parts.push(`occurred_at <= $${params.length + 1}`);
+      params.push(end);
+    }
+    const clause = parts.length ? ` AND ${parts.join(' AND ')}` : '';
 
     const rows = await this.dataSource.query(
       `SELECT
          COALESCE(SUM(CASE WHEN transaction_type = 'DELIVERY' THEN quantity_litres ELSE 0 END), 0) AS received,
          COALESCE(SUM(CASE WHEN transaction_type = 'SALE' THEN -quantity_litres ELSE 0 END), 0) AS sold
        FROM inventory_transactions
-       WHERE TRUE${clause('branch_id')}`,
+       WHERE TRUE${clause}`,
       params,
     );
 
     const revenueParams: unknown[] = [];
     const revenueClause: string[] = ['voided_at IS NULL'];
+    if (businessId) {
+      revenueClause.push(`business_id = $${revenueParams.length + 1}`);
+      revenueParams.push(businessId);
+    }
     if (branchId) {
       revenueClause.push(`branch_id = $${revenueParams.length + 1}`);
       revenueParams.push(branchId);
@@ -202,7 +227,12 @@ export class DashboardsService {
    *
    * A null `businessId` means the platform-wide view: branches of every
    * business appear, each tagged with its business name so the caller can tell
-   * them apart.
+   * them apart. A `branchId` narrows the comparison list itself — the caller
+   * asked for one branch, so every other row would just be noise.
+   *
+   * Business and branch restrict which branch rows appear (WHERE); the time
+   * window restricts which sales match (JOIN), so a branch with no sales in
+   * the window still shows with zeros instead of vanishing.
    */
   private async branchPerformance(
     businessId: string | null,
@@ -211,22 +241,23 @@ export class DashboardsService {
     end: Date | null,
   ): Promise<BranchPerformanceDto[]> {
     const params: unknown[] = [];
-    const filters: string[] = [];
+    const where: string[] = ['branch.deleted_at IS NULL'];
+    const join: string[] = [];
 
     if (businessId) {
-      filters.push(`branch.business_id = $${params.length + 1}`);
+      where.push(`branch.business_id = $${params.length + 1}`);
       params.push(businessId);
     }
     if (branchId) {
-      filters.push(`sale.branch_id = $${params.length + 1}`);
+      where.push(`branch.id = $${params.length + 1}`);
       params.push(branchId);
     }
     if (start) {
-      filters.push(`sale.sold_at >= $${params.length + 1}`);
+      join.push(`sale.sold_at >= $${params.length + 1}`);
       params.push(start);
     }
     if (end) {
-      filters.push(`sale.sold_at <= $${params.length + 1}`);
+      join.push(`sale.sold_at <= $${params.length + 1}`);
       params.push(end);
     }
 
@@ -245,8 +276,8 @@ export class DashboardsService {
          LEFT JOIN sales sale
            ON sale.branch_id = branch.id
           AND sale.voided_at IS NULL
-          ${filters.length ? `AND ${filters.join(' AND ')}` : ''}
-        WHERE branch.deleted_at IS NULL
+          ${join.length ? `AND ${join.join(' AND ')}` : ''}
+        WHERE ${where.join(' AND ')}
         GROUP BY branch.id, branch.name, branch.business_id, business.name
         ORDER BY business.name ASC, branch.name ASC`,
       params,

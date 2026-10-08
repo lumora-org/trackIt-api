@@ -2,21 +2,26 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { BranchStatus } from '../common/enums/business.enum';
 import { NotificationType } from '../common/enums/notification.enum';
-import { DailyReportStatus } from '../common/enums/report.enum';
+import {
+  endOfDayInTimeZone,
+  startOfDayInTimeZone,
+  toDateOnlyInTimeZone,
+} from '../common/utils/date.util';
 import { Branch } from '../branches/entities/branch.entity';
 import { NotificationsService } from '../notifications/notifications.service';
-import { DailyReport } from './entities/daily-report.entity';
+import { Sale } from '../sales/entities/sale.entity';
 
 /**
- * End-of-day daily-report reminder (product decision, 2026-10).
+ * End-of-day sales-recording reminder (product decision, 2026-10).
  *
- * A manager must send the branch's total litres sold before the day closes.
- * When the business day reaches its end without a SUBMITTED/APPROVED report,
- * BOTH the branch managers and the business admins are alerted.
+ * Under the day-total model the manager's financial obligation is to record
+ * the branch's total litres sold before the day closes. When the business day
+ * reaches its end without ANY sale recorded for a branch, BOTH the branch
+ * managers and the business admins are alerted.
  *
  * The scheduler ticks every 30 minutes in server time and checks the wall
  * clock in the BUSINESS timezone, because `@Cron`'s `timeZone` option is
@@ -25,8 +30,8 @@ import { DailyReport } from './entities/daily-report.entity';
  * offset between server and business time.
  */
 @Injectable()
-export class DailyReportReminderService {
-  private readonly logger = new Logger(DailyReportReminderService.name);
+export class SalesRecordingReminderService {
+  private readonly logger = new Logger(SalesRecordingReminderService.name);
 
   /** Guards against a double send when two ticks land in the same window. */
   private lastReminderDate: string | null = null;
@@ -34,8 +39,8 @@ export class DailyReportReminderService {
   constructor(
     @InjectRepository(Branch)
     private readonly branches: Repository<Branch>,
-    @InjectRepository(DailyReport)
-    private readonly reports: Repository<DailyReport>,
+    @InjectRepository(Sale)
+    private readonly sales: Repository<Sale>,
     private readonly notifications: NotificationsService,
     private readonly config: ConfigService,
   ) {}
@@ -56,68 +61,66 @@ export class DailyReportReminderService {
 
       const [hour, minute] = clock.split(':').map(Number);
       if (hour === 22 && minute < 30) {
-        await this.remindMissingReports();
+        await this.remindMissingSales();
       }
     } catch (error) {
       // A clock or timezone problem must never crash the scheduler.
-      this.logger.error('Daily-report reminder tick failed', error as Error);
+      this.logger.error('Sales-recording reminder tick failed', error as Error);
     }
   }
 
-  /** Alerts managers and admins for every active branch without a report today. */
-  async remindMissingReports(): Promise<void> {
-    const today = new Intl.DateTimeFormat('en-CA', {
-      timeZone: this.businessTimezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
+  /** Alerts managers and admins for every active branch with no sale today. */
+  async remindMissingSales(): Promise<void> {
+    const today = toDateOnlyInTimeZone(new Date(), this.businessTimezone);
 
     if (this.lastReminderDate === today) return;
     this.lastReminderDate = today;
 
-    // DRAFT and REJECTED do not count as sent: the day's totals must reach an
-    // admin in a reviewable state.
-    const counted = [
-      DailyReportStatus.SUBMITTED,
-      DailyReportStatus.UNDER_REVIEW,
-      DailyReportStatus.APPROVED,
-    ];
+    const dayStart = startOfDayInTimeZone(today, this.businessTimezone);
+    const dayEnd = endOfDayInTimeZone(today, this.businessTimezone);
 
-    const reported = await this.reports.find({
-      where: { reportDate: today, status: In(counted) },
-    });
-    const reportedBranchIds = new Set(reported.map((report) => report.branchId));
+    // getRawMany, not getMany: the partial select has no primary key, so
+    // TypeORM's entity transformation would return no rows and every branch
+    // would be falsely reported as missing.
+    const recorded = await this.sales
+      .createQueryBuilder('sale')
+      .select('sale.branch_id', 'branchId')
+      .where('sale.sold_at >= :dayStart', { dayStart })
+      .andWhere('sale.sold_at < :dayEnd', { dayEnd })
+      .andWhere('sale.voided_at IS NULL')
+      .distinct(true)
+      .getRawMany<{ branchId: string }>();
+    const recordedBranchIds = new Set(recorded.map((row) => row.branchId));
 
     const activeBranches = await this.branches.find({
       where: { status: BranchStatus.ACTIVE },
     });
 
     for (const branch of activeBranches) {
-      if (reportedBranchIds.has(branch.id)) continue;
+      if (recordedBranchIds.has(branch.id)) continue;
 
       try {
         await this.notifications.notifyBranchManagers(branch.businessId, branch.id, {
-          type: NotificationType.DAILY_REPORT_MISSING,
-          title: 'Daily report not submitted',
-          message: `Today's report for ${branch.name} (${today}) has not been submitted yet.`,
+          type: NotificationType.SALES_NOT_RECORDED,
+          title: 'Sales not recorded',
+          message: `No sales have been recorded for ${branch.name} today (${today}). Record the day's totals before closing.`,
           resourceType: 'BRANCH',
           resourceId: branch.id,
         });
 
         await this.notifications.notifyBusinessAdmins(branch.businessId, {
-          type: NotificationType.DAILY_REPORT_MISSING,
-          title: 'Daily report missing',
-          message: `${branch.name} has not submitted its daily report for ${today}.`,
+          type: NotificationType.SALES_NOT_RECORDED,
+          title: 'Sales not recorded',
+          message: `${branch.name} has not recorded any sales for ${today}.`,
           resourceType: 'BRANCH',
           resourceId: branch.id,
         });
 
-        this.logger.warn(`Daily report missing for branch ${branch.code} on ${today}`);
+        this.logger.warn(`No sales recorded for branch ${branch.code} on ${today}`);
       } catch (error) {
         // One failing branch must not stop the remaining reminders.
         this.logger.error(
-          `Failed to send the daily-report reminder for branch ${branch.id}`,
+          `Failed to send the sales-recording reminder for branch ${branch.id}`,
           error as Error,
         );
       }

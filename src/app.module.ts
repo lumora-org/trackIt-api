@@ -30,6 +30,7 @@ import { DeliveriesModule } from './deliveries/deliveries.module';
 import { FuelOrdersModule } from './fuel-orders/fuel-orders.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { IncidentsModule } from './incidents/incidents.module';
 import { SalesModule } from './sales/sales.module';
 import { DailyReportsModule } from './daily-reports/daily-reports.module';
 import { DashboardsModule } from './dashboard/dashboards.module';
@@ -60,7 +61,7 @@ import { ReportsModule } from './reports/reports.module';
       ],
     }),
 
-    // Drives the daily-report reminder cron (daily-reports module).
+    // Drives the end-of-day reminders (daily-reports module).
     ScheduleModule.forRoot(),
 
     CommonModule,
@@ -79,6 +80,7 @@ import { ReportsModule } from './reports/reports.module';
     FuelOrdersModule,
     InventoryModule,
     NotificationsModule,
+    IncidentsModule,
     SalesModule,
     DailyReportsModule,
     DashboardsModule,

@@ -25,6 +25,8 @@ import {
   RejectDailyReportDto,
 } from './dto/daily-report.dto';
 import { DailyReportResponseDto } from './dto/daily-report-response.dto';
+import { DailySalesSummaryQueryDto } from './dto/daily-sales-summary.dto';
+import { DailySalesSummaryRowDto } from './dto/daily-sales-summary-response.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -49,6 +51,25 @@ export class DailyReportsController {
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<PaginatedResult<DailyReportResponseDto>> {
     return this.reports.findAll(query, actor);
+  }
+
+  @Get('summary')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Admin sales roll-up — the destination for every manager sale record',
+    description:
+      'One row per (business day, branch) inside the window (defaults to the ' +
+      'last 30 days), with the day aggregate, the per-fuel split and the ' +
+      "branch's incident counts for the same day. Days are grouped in the " +
+      'business timezone and include SINGLE and DAY_TOTAL sales alike; voided ' +
+      'sales are excluded. No daily-report submission is involved.',
+  })
+  @ApiOkResponse({ type: DailySalesSummaryRowDto, isArray: true })
+  async salesSummary(
+    @Query() query: DailySalesSummaryQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PaginatedResult<DailySalesSummaryRowDto>> {
+    return this.reports.salesSummary(query, actor);
   }
 
   @Get(':id')

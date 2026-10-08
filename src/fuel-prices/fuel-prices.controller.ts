@@ -54,12 +54,12 @@ export class FuelPricesController {
   @Post()
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Set a new price period',
+    summary: 'Set a new price — effective immediately',
     description:
-      'Creates a new interval and closes the previous open one in the same ' +
-      'transaction, so the fuel is never left without a valid price. ' +
-      'Periods are half-open [from, to): the new price takes effect exactly at ' +
-      'effectiveFrom. Overlaps are rejected with 422 INVALID_FUEL_PRICE.',
+      'Price changes are never scheduled: the server stamps the current ' +
+      'instant as the start of the new period, closes the previous interval ' +
+      'and drops any future-dated legacy period in the same transaction, so ' +
+      'the fuel is never left without a valid price.',
   })
   @ApiCreatedResponse({ type: FuelPriceResponseDto })
   @ApiUnprocessableEntityResponse({ type: ApiErrorResponse })

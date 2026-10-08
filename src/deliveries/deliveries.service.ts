@@ -26,10 +26,26 @@ import { ReceiveDeliveryDto } from './dto/receive-delivery.dto';
 import { DeliveryGeneratorService } from './services/delivery-number.service';
 
 /**
- * Deliveries are created by the backend when a fuel order goes in transit, not
- * by the client: the Deliveries screen only ever lists backend-created rows
- * (PROMPT-B.E §4.10).
+ * Deliveries are created by the backend — with the fuel order itself, so the
+ * destination branch's manager sees incoming fuel from the moment it is
+ * ordered — never by the client: the Deliveries screen only ever lists
+ * backend-created rows (PROMPT-B.E §4.10).
  */
+
+/** The fuel-order data a pending delivery is built from. */
+export interface PendingDeliveryOrderInput {
+  id: string;
+  businessId: string;
+  destinationBranchId: string;
+  orderNumber: string;
+  items: Array<{
+    id: string;
+    fuelTypeId: string;
+    expectedQuantityLitres: string;
+    expectedDeliveredLitres: string;
+  }>;
+}
+
 @Injectable()
 export class DeliveriesService {
   private readonly logger = new Logger(DeliveriesService.name);
@@ -91,24 +107,12 @@ export class DeliveriesService {
   /**
    * Creates the PENDING delivery that a manager will eventually receive.
    *
-   * Called by the fuel-order flow when an order goes IN_TRANSIT. One delivery is
-   * created per order in the MVP; the schema and the remaining-quantity
-   * calculation both support several deliveries per order (docs/09 §11), which
-   * is what a split tanker load will need.
+   * One delivery is created per order in the MVP; the schema and the
+   * remaining-quantity calculation both support several deliveries per order
+   * (docs/09 §11), which is what a split tanker load will need.
    */
   async createPendingForOrder(
-    order: {
-      id: string;
-      businessId: string;
-      destinationBranchId: string;
-      orderNumber: string;
-      items: Array<{
-        id: string;
-        fuelTypeId: string;
-        expectedQuantityLitres: string;
-        expectedDeliveredLitres: string;
-      }>;
-    },
+    order: PendingDeliveryOrderInput,
     tankerId: string | null,
     manager: EntityManager,
   ): Promise<Delivery> {
@@ -157,6 +161,53 @@ export class DeliveriesService {
     this.logger.log(`Created pending delivery ${saved.id} for order ${order.orderNumber}`);
 
     return saved;
+  }
+
+  /**
+   * Guarantees the order has a PENDING delivery awaiting receipt.
+   *
+   * A delivery is created as soon as the order is placed, so by dispatch time
+   * it usually already exists: this then only records the tanker instead of
+   * creating a duplicate. Older orders — or a future second load — fall back
+   * to creating a fresh delivery.
+   */
+  async ensurePendingForOrder(
+    order: PendingDeliveryOrderInput,
+    tankerId: string | null,
+    manager: EntityManager,
+  ): Promise<Delivery> {
+    const repository = manager.getRepository(Delivery);
+
+    const existing = await repository.findOne({
+      where: { fuelOrderId: order.id, status: DeliveryStatus.PENDING },
+    });
+
+    if (existing) {
+      if (tankerId && !existing.tankerId) {
+        existing.tankerId = tankerId;
+        await repository.save(existing);
+      }
+      return existing;
+    }
+
+    return this.createPendingForOrder(order, tankerId, manager);
+  }
+
+  /**
+   * Cancels deliveries still awaiting receipt for a cancelled order, so a
+   * manager can never receive fuel for an order that was called off.
+   */
+  async cancelPendingForOrder(fuelOrderId: string, manager: EntityManager): Promise<number> {
+    const result = await manager
+      .getRepository(Delivery)
+      .createQueryBuilder()
+      .update(Delivery)
+      .set({ status: DeliveryStatus.CANCELLED })
+      .where('fuel_order_id = :fuelOrderId', { fuelOrderId })
+      .andWhere('delivery_status = :status', { status: DeliveryStatus.PENDING })
+      .execute();
+
+    return result.affected ?? 0;
   }
 
   /** Scoped listing: a MANAGER only ever sees their own branch's deliveries. */
@@ -286,7 +337,9 @@ export class DeliveriesService {
       // both get past the status check.
       const locked = await repository
         .createQueryBuilder('delivery')
-        .setLock('pessimistic_write')
+        // Lock only the delivery row: PostgreSQL refuses FOR UPDATE on the
+        // nullable side of the items outer join.
+        .setLock('pessimistic_write', undefined, ['delivery'])
         .leftJoinAndSelect('delivery.items', 'item')
         .where('delivery.id = :id', { id })
         .getOne();

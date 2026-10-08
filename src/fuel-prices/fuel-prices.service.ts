@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, MoreThan, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { AuthorizationService } from '../common/services/authorization.service';
@@ -175,14 +175,14 @@ export class FuelPricesService {
   }
 
   /**
-   * Creates a new price interval and closes the previous one atomically.
+   * Sets the price that applies from this instant on.
    *
-   * Closing and creating MUST be in one transaction: without it a crash between
-   * the two steps leaves the fuel with no valid price at all (docs/08 §25).
-   *
-   * Overlap is rejected twice over — by an explicit check that yields a friendly
-   * 422, and by the EXCLUDE USING gist constraint in the migration, which is the
-   * final authority (docs/08 §21).
+   * Price changes are immediate by design (product decision 2026-10): there is
+   * no scheduling, and any future-dated period is dropped. Closing the current
+   * interval and creating the new one MUST be in one transaction: without it a
+   * crash between the two steps leaves the fuel with no valid price at all
+   * (docs/08 §25). The EXCLUDE USING gist constraint in the migration remains
+   * the final authority on overlap (docs/08 §21).
    */
   async create(
     dto: CreateFuelPriceDto,
@@ -198,14 +198,9 @@ export class FuelPricesService {
       );
     }
 
-    const effectiveFrom = new Date(dto.effectiveFrom);
-
-    if (Number.isNaN(effectiveFrom.getTime())) {
-      throw apiError(
-        ErrorCode.VALIDATION_ERROR,
-        'effectiveFrom must be a valid ISO 8601 timestamp.',
-      );
-    }
+    // The server, not the client, decides when the new price starts: changes
+    // take effect immediately (product decision 2026-10 — no scheduling).
+    const now = new Date();
 
     // Normalise through DecimalMath so 1500 and 1500.00 store identically.
     const pricePerLitre = DecimalMath.toFixedString(
@@ -233,42 +228,39 @@ export class FuelPricesService {
         .setLock('pessimistic_write')
         .getMany();
 
-      const openInterval = await repository.findOne({
-        where: {
-          businessId,
-          fuelTypeId: dto.fuelTypeId,
-          effectiveTo: IsNull(),
-        },
+      // Scheduling is gone: retire any future-dated period (legacy data from
+      // the old model) so the new open-ended interval cannot clash with it.
+      const removed = await repository.delete({
+        businessId,
+        fuelTypeId: dto.fuelTypeId,
+        effectiveFrom: MoreThan(now),
       });
 
-      if (openInterval && effectiveFrom.getTime() <= openInterval.effectiveFrom.getTime()) {
-        throw apiError(
-          ErrorCode.INVALID_FUEL_PRICE,
-          'The new price must start after the current price period begins.',
-          [{ field: 'effectiveFrom', message: 'must be later than the active price start' }],
-        );
-      }
-
-      // Any other interval whose window intersects [effectiveFrom, ∞) is an overlap.
-      const clashing = await repository
+      // The interval in force at this instant is what the fuel costs until the
+      // new price lands, so it is closed exactly at `now`.
+      const current = await repository
         .createQueryBuilder('price')
         .where('price.business_id = :businessId', { businessId })
         .andWhere('price.fuel_type_id = :fuelTypeId', { fuelTypeId: dto.fuelTypeId })
-        .andWhere('price.effective_from >= :effectiveFrom', { effectiveFrom })
+        .andWhere('price.effective_from <= :now', { now })
+        .andWhere('(price.effective_to IS NULL OR price.effective_to > :now)', { now })
+        .orderBy('price.effective_from', 'DESC')
         .getOne();
 
-      if (clashing) {
+      if (current && current.effectiveFrom.getTime() >= now.getTime()) {
+        // Two edits inside the same millisecond leave no room to close the
+        // previous interval; ask for a retry instead of violating the
+        // fuel_prices_interval_ordered CHECK (effective_to > effective_from).
         throw apiError(
           ErrorCode.INVALID_FUEL_PRICE,
-          'The new price period overlaps an existing price period.',
-          [{ field: 'effectiveFrom', message: 'overlaps an existing price period' }],
+          'A price change was applied at this very instant. Please try again.',
         );
       }
 
-      // Step 1: close the currently open interval at the new start.
-      if (openInterval) {
-        openInterval.effectiveTo = effectiveFrom;
-        await repository.save(openInterval);
+      // Step 1: close the current interval at the new start.
+      if (current) {
+        current.effectiveTo = now;
+        await repository.save(current);
       }
 
       // Step 2: open the new interval.
@@ -276,7 +268,7 @@ export class FuelPricesService {
         businessId,
         fuelTypeId: fuelType.id,
         pricePerLitre,
-        effectiveFrom,
+        effectiveFrom: now,
         effectiveTo: null,
         createdBy: actor.id,
       });
@@ -291,8 +283,9 @@ export class FuelPricesService {
           resourceId: saved.id,
           metadata: {
             fuelTypeCode: fuelType.code,
-            closedPreviousPriceId: openInterval?.id ?? null,
-            previousPricePerLitre: openInterval?.pricePerLitre ?? null,
+            closedPreviousPriceId: current?.id ?? null,
+            previousPricePerLitre: current?.pricePerLitre ?? null,
+            removedScheduledPeriods: removed.affected ?? 0,
           },
           newValues: this.toResponse(saved) as unknown as Record<string, unknown>,
         },
@@ -302,7 +295,7 @@ export class FuelPricesService {
       // Price changes affect every branch's sales immediately, so the admins
       // AND the branch managers are alerted — inside the same transaction so
       // the alert cannot be lost if the price write were to roll back.
-      const priceMessage = `${fuelType.code} is now ${saved.pricePerLitre} per litre, effective ${saved.effectiveFrom.toISOString().slice(0, 10)}.`;
+      const priceMessage = `${fuelType.code} is now ${saved.pricePerLitre} per litre, effective immediately.`;
       await this.notifications.notifyBusinessAdmins(
         businessId,
         {
@@ -327,7 +320,7 @@ export class FuelPricesService {
       );
 
       this.logger.log(
-        `Fuel price for ${fuelType.code} set to ${saved.pricePerLitre} from ${saved.effectiveFrom.toISOString()}`,
+        `Fuel price for ${fuelType.code} set to ${saved.pricePerLitre}, effective immediately`,
       );
 
       return saved;

@@ -83,11 +83,6 @@ export class ManagerTodayDto {
   revenue!: string;
 }
 
-export class ManagerReportStubDto {
-  @ApiProperty({ example: 'DRAFT' })
-  status!: string;
-}
-
 export class ManagerBranchDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -107,9 +102,11 @@ export class ManagerDashboardDto {
   today!: ManagerTodayDto;
 
   @ApiProperty({
-    type: ManagerReportStubDto,
-    nullable: true,
-    description: "Today's report status, or null when none exists",
+    example: true,
+    description:
+      "Whether any sale has been recorded for today's business day. Drives " +
+      'the "record your sales" nudge on the manager dashboard (the day-total ' +
+      'model replaced the daily-report status).',
   })
-  dailyReport!: ManagerReportStubDto | null;
+  salesRecordedToday!: boolean;
 }

@@ -19,14 +19,17 @@ export class DeliveryGeneratorService {
     const year = new Date().getUTCFullYear();
     const like = `${DeliveryGeneratorService.PREFIX}-${year}-%`;
 
+    // getRawMany, not getMany: the partial select has no primary key, so
+    // TypeORM's entity transformation returns no rows and the generator would
+    // reissue the first number of the year, colliding on every create.
     const existing = await manager
       .getRepository(Delivery)
       .createQueryBuilder('delivery')
-      .select('delivery.delivery_number', 'delivery_number')
+      .select('delivery.delivery_number', 'deliveryNumber')
       .where('delivery.business_id = :businessId', { businessId })
       .andWhere('delivery.delivery_number LIKE :like', { like })
       .orderBy('delivery.delivery_number', 'DESC')
-      .getMany();
+      .getRawMany<{ deliveryNumber: string | null }>();
 
     const highest = existing.reduce((max, row) => {
       const sequence = Number.parseInt(row.deliveryNumber?.split('-').pop() ?? '0', 10);

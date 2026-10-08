@@ -9,6 +9,7 @@ import { FuelOrderItem } from '../fuel-orders/entities/fuel-order-item.entity';
 import { FuelOrder } from '../fuel-orders/entities/fuel-order.entity';
 import { FuelType } from '../fuel-types/entities/fuel-type.entity';
 import { IdempotencyKey } from '../idempotency/entities/idempotency-key.entity';
+import { IncidentReport } from '../incidents/entities/incident-report.entity';
 import { InventoryTransaction } from '../inventory/entities/inventory-transaction.entity';
 import { Notification } from '../notifications/entities/notification.entity';
 import { PasswordResetToken } from '../users/entities/password-reset-token.entity';
@@ -35,6 +36,7 @@ export const ENTITIES = [
   InventoryTransaction,
   Sale,
   DailyReport,
+  IncidentReport,
   Notification,
   AuditLog,
   IdempotencyKey,
@@ -52,6 +54,7 @@ export {
   FuelPrice,
   FuelType,
   IdempotencyKey,
+  IncidentReport,
   InventoryTransaction,
   Notification,
   PasswordResetToken,

@@ -18,7 +18,13 @@ import {
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { SalesService } from './sales.service';
-import { CreateSaleDto, ListSalesQueryDto, VoidSaleDto } from './dto/sale.dto';
+import {
+  CreateSaleDto,
+  ListSalesQueryDto,
+  RecordDayTotalDto,
+  RejectSaleDto,
+  VoidSaleDto,
+} from './dto/sale.dto';
 import { SaleResponseDto } from './dto/sale-response.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Idempotent } from '../common/decorators/idempotent.decorator';
@@ -78,6 +84,73 @@ export class SalesController {
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<SaleResponseDto> {
     return this.sales.create(dto, actor, { userId: actor.id });
+  }
+
+  @Post('day-total')
+  @Roles(UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Idempotent()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Record (or correct) the day-total sale figure for one fuel',
+    description:
+      'Upserts the branch running total litres sold for one fuel on one ' +
+      'business day (defaults to today; future dates are rejected). The ' +
+      'backend prices the added litres and computes the amount; the ledger ' +
+      'only moves by the delta between the previous and the new total. ' +
+      'totalLitres: 0 clears the day and restores the stock it had booked. ' +
+      'An unchanged figure is a no-op that returns the current row.',
+  })
+  @ApiOkResponse({ type: SaleResponseDto })
+  @ApiUnprocessableEntityResponse({ type: ApiErrorResponse })
+  async recordDayTotal(
+    @Body() dto: RecordDayTotalDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<SaleResponseDto | null> {
+    return this.sales.recordDayTotal(dto, actor, { userId: actor.id });
+  }
+
+  @Post(':id/approve')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Idempotent()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Approve a manager-recorded sale',
+    description:
+      'Confirms a figure that is awaiting review (product decision, 2026-10). ' +
+      'Approval is workflow metadata only — the litres and amount already ' +
+      'count in every aggregate, so nothing recomputes. A REJECTED figure can ' +
+      'be approved as well, reversing a refusal. The manager who recorded the ' +
+      'sale is notified.',
+  })
+  @ApiOkResponse({ type: SaleResponseDto })
+  @ApiUnprocessableEntityResponse({ type: ApiErrorResponse })
+  async approve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<SaleResponseDto> {
+    return this.sales.approve(id, actor, { userId: actor.id });
+  }
+
+  @Post(':id/reject')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Idempotent()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reject a manager-recorded sale',
+    description:
+      'Refuses a figure that is awaiting review, with a mandatory reason. ' +
+      'The figures stay on the books exactly as recorded; the manager is ' +
+      'notified and revises the day total, which returns the row to PENDING. ' +
+      'An already-approved sale is corrected by voiding it instead.',
+  })
+  @ApiOkResponse({ type: SaleResponseDto })
+  @ApiUnprocessableEntityResponse({ type: ApiErrorResponse })
+  async reject(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectSaleDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<SaleResponseDto> {
+    return this.sales.reject(id, dto, actor, { userId: actor.id });
   }
 
   @Post(':id/void')

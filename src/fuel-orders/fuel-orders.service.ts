@@ -160,6 +160,10 @@ export class FuelOrdersService {
   /**
    * Creates a DRAFT order. Nothing here touches inventory: an order is a
    * procurement commitment, not stock (docs/09 §1, §2).
+   *
+   * The destination branch's manager is involved from the start (product
+   * decision, 2026-10): the PENDING delivery is created here and the branch's
+   * managers are notified immediately, instead of waiting for dispatch.
    */
   async create(
     dto: CreateFuelOrderDto,
@@ -178,6 +182,14 @@ export class FuelOrdersService {
         dto.destinationBranchId,
         businessId,
       );
+
+      // The tanker is optional at order time (product decision, 2026-10). When
+      // it is known it is validated and attached now, so the destination
+      // branch already sees it on the pending delivery; otherwise dispatch
+      // attaches one when the order goes IN_TRANSIT.
+      const tanker = dto.tankerId
+        ? await this.tankers.requireUsableTanker(dto.tankerId, businessId, manager)
+        : null;
 
       const expectedDeliveryAt = new Date(dto.expectedDeliveryAt);
       if (Number.isNaN(expectedDeliveryAt.getTime())) {
@@ -235,13 +247,52 @@ export class FuelOrdersService {
 
       await itemRepository.save(items);
 
+      // The delivery the branch manager will receive is created with the order
+      // itself, so fuel appears in that branch's Deliveries screen the moment
+      // it is ordered — including the tanker, when one was chosen here.
+      const delivery = await this.deliveries.ensurePendingForOrder(
+        {
+          id: saved.id,
+          businessId,
+          destinationBranchId: branch.id,
+          orderNumber: saved.orderNumber,
+          items: items.map((item) => ({
+            id: item.id,
+            fuelTypeId: item.fuelTypeId,
+            expectedQuantityLitres: item.expectedQuantityLitres,
+            expectedDeliveredLitres: '0',
+          })),
+        },
+        tanker?.id ?? null,
+        manager,
+      );
+
+      // The destination branch's managers learn immediately that fuel is
+      // coming their way, in the same transaction as the order itself.
+      await this.notifications.notifyBranchManagers(
+        businessId,
+        branch.id,
+        {
+          type: NotificationType.FUEL_ORDER_ASSIGNED,
+          title: `New fuel order for ${branch.name}`,
+          message: `Order ${saved.orderNumber} is assigned to ${branch.name}. Confirm receipt when the tanker arrives.`,
+          resourceType: 'DELIVERY',
+          resourceId: delivery.id,
+        },
+        manager,
+      );
+
       await this.audit.record(
         { ...auditActor, userId: actor.id, businessId, branchId: branch.id },
         {
           action: AuditAction.FUEL_ORDER_CREATED,
           resourceType: AuditResourceType.FUEL_ORDER,
           resourceId: saved.id,
-          newValues: { orderNumber: saved.orderNumber, itemCount: items.length },
+          newValues: {
+            orderNumber: saved.orderNumber,
+            itemCount: items.length,
+            tankerId: tanker?.id ?? null,
+          },
         },
         manager,
       );
@@ -250,7 +301,13 @@ export class FuelOrdersService {
         `Fuel order ${saved.orderNumber} created for branch ${branch.code} with ${items.length} item(s)`,
       );
 
-      return this.findOneOrFail(saved.id, actor);
+      // Read through the transaction manager: the global repository cannot see
+      // this uncommitted row, and a global read here would 404 and roll the
+      // whole creation back.
+      return manager.getRepository(FuelOrder).findOneOrFail({
+        where: { id: saved.id },
+        relations: { items: { fuelType: true }, supplier: true, destinationBranch: true },
+      });
     });
   }
 
@@ -315,8 +372,16 @@ export class FuelOrdersService {
 
       await repository.save(locked);
 
-      // Going in transit is what makes the fuel physically receivable: the
-      // PENDING delivery is created here so the branch manager can receive it.
+      // Calling the order off cancels any delivery still awaiting receipt, so
+      // a manager can never receive fuel for an order that was cancelled.
+      if (target === FuelOrderStatus.CANCELLED) {
+        await this.deliveries.cancelPendingForOrder(locked.id, manager);
+      }
+
+      // Dispatch records the tanker on the PENDING delivery created when the
+      // order was placed — that is the row the branch manager receives. Orders
+      // raised before that behavior existed, or a future extra load, are
+      // covered by the fallback inside ensurePendingForOrder.
       if (target === FuelOrderStatus.IN_TRANSIT) {
         const tanker = options.tankerId
           ? await this.tankers.requireUsableTanker(options.tankerId, businessId, manager)
@@ -329,7 +394,7 @@ export class FuelOrdersService {
           .where('item.fuel_order_id = :id', { id })
           .getMany();
 
-        const delivery = await this.deliveries.createPendingForOrder(
+        const delivery = await this.deliveries.ensurePendingForOrder(
           {
             id: locked.id,
             businessId: locked.businessId,
@@ -398,7 +463,13 @@ export class FuelOrdersService {
         manager,
       );
 
-      return this.findOneOrFail(locked.id, actor);
+      // Same reason as create(): the row is not committed yet, so it must be
+      // read through the transaction manager or the transition would 404 and
+      // roll the status change back.
+      return manager.getRepository(FuelOrder).findOneOrFail({
+        where: { id: locked.id },
+        relations: { items: { fuelType: true }, supplier: true, destinationBranch: true },
+      });
     });
   }
 
@@ -453,17 +524,21 @@ export class FuelOrdersService {
     const year = new Date().getUTCFullYear();
     const like = `ORD-${year}-%`;
 
+    // getRawMany, not getMany: a partial select without the primary key sends
+    // TypeORM's entity transformation down its distinct-alias path, which
+    // returns no rows here — the generator then reissued the first number of
+    // the year and every create collided with the business's existing orders.
     const existing = await manager
       .getRepository(FuelOrder)
       .createQueryBuilder('order')
-      .select('order.order_number', 'order_number')
+      .select('order.order_number', 'orderNumber')
       .where('order.business_id = :businessId', { businessId })
       .andWhere('order.order_number LIKE :like', { like })
       .orderBy('order.order_number', 'DESC')
-      .getMany();
+      .getRawMany<{ orderNumber: string | null }>();
 
     const highest = existing.reduce((max, row) => {
-      const sequence = Number.parseInt(row.orderNumber.split('-').pop() ?? '0', 10);
+      const sequence = Number.parseInt(row.orderNumber?.split('-').pop() ?? '0', 10);
       return Number.isFinite(sequence) && sequence > max ? sequence : max;
     }, 0);
 

@@ -174,12 +174,16 @@ async function run(dataSource: DataSource): Promise<void> {
       fuelTypes[spec.code] = fuelType.id;
     }
 
-    // ── Price history: 1 Oct 1,500 / 10 Oct 1,550 / 18 Oct 1,600 (docs/08 §32)
+    // ── Price history: 1,500 → 1,550 → 1,600 (docs/08 §32).
+    // A price change takes effect immediately and is never scheduled
+    // (product decision 2026-10), so every period starts in the past and the
+    // last one is open-ended — the price sales resolve to today.
     const year = new Date().getUTCFullYear();
+    const daysBefore = (days: number): Date => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const priceWindows = [
-      { from: `${year}-10-01T00:00:00.000Z`, to: `${year}-10-10T00:00:00.000Z`, price: '1500.00' },
-      { from: `${year}-10-10T00:00:00.000Z`, to: `${year}-10-18T00:00:00.000Z`, price: '1550.00' },
-      { from: `${year}-10-18T00:00:00.000Z`, to: null, price: '1600.00' },
+      { from: daysBefore(37), to: daysBefore(18), price: '1500.00' },
+      { from: daysBefore(18), to: daysBefore(7), price: '1550.00' },
+      { from: daysBefore(7), to: null, price: '1600.00' },
     ];
 
     for (const window of priceWindows) {

@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { SaleApprovalStatus, SaleRecordMode } from '../../common/enums/fuel.enum';
 
 export class SaleResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -24,6 +25,25 @@ export class SaleResponseDto {
 
   @ApiProperty({ example: '12750000.00', description: 'litresSold x unitPrice' })
   totalAmount!: string;
+
+  @ApiProperty({
+    enum: SaleRecordMode,
+    description: 'SINGLE = one transaction; DAY_TOTAL = the day running total',
+  })
+  recordMode!: SaleRecordMode;
+
+  @ApiProperty({
+    enum: SaleApprovalStatus,
+    description:
+      'Admin confirmation: PENDING awaits review, APPROVED is confirmed, REJECTED must be revised',
+  })
+  approvalStatus!: SaleApprovalStatus;
+
+  @ApiProperty({ nullable: true, description: 'Set when the figure was confirmed' })
+  approvedAt!: Date | null;
+
+  @ApiProperty({ nullable: true, description: 'Why a figure was refused' })
+  rejectionReason!: string | null;
 
   @ApiProperty()
   soldAt!: Date;

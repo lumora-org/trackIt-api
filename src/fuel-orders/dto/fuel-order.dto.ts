@@ -60,6 +60,16 @@ export class CreateFuelOrderDto {
   @IsDateString({}, { message: 'expectedDeliveryAt must be an ISO 8601 timestamp' })
   expectedDeliveryAt!: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Tanker assigned to the delivery, if already known. Optional: dispatch ' +
+      'can attach or change it when the order goes IN_TRANSIT.',
+  })
+  @IsOptional()
+  @IsUUID()
+  tankerId?: string;
+
   @ApiPropertyOptional({ nullable: true, example: 'Morning delivery' })
   @IsOptional()
   @IsString()

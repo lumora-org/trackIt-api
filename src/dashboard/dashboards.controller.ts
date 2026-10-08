@@ -24,8 +24,9 @@ export class DashboardsController {
     description:
       'Branch count, fuel received and sold, revenue and per-branch ' +
       'performance. from/to narrow the movement and revenue window; current ' +
-      'stock figures are always current. A manager-scoped branch filter is ' +
-      'clamped to the caller.',
+      'stock figures are always current. A branchId narrows the overview — ' +
+      'summary figures and the branch list — to that one branch; a ' +
+      'manager-scoped branch filter is clamped to the caller.',
   })
   @ApiOkResponse({ type: AdminDashboardDto })
   async admin(

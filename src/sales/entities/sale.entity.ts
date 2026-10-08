@@ -10,15 +10,17 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Branch } from '../../branches/entities/branch.entity';
 import { FuelType } from '../../fuel-types/entities/fuel-type.entity';
+import { SaleApprovalStatus, SaleRecordMode } from '../../common/enums/fuel.enum';
 
 /**
  * A sale is a historical financial fact: `unit_price` is a snapshot of the
- * price applicable at `sold_at`, never re-derived later (docs/08 §30, §79).
- * `total_amount` is computed by the backend — the client cannot set it
- * (PROMPT.md §35).
+ * price in force when the sale was recorded, never re-derived later
+ * (docs/08 §30, §79). `total_amount` is computed by the backend — the client
+ * cannot set it (PROMPT.md §35).
  *
- * There is deliberately no `status` column: CREATED vs VOIDED is decided by
- * `voided_at` (docs/03 §50, PROMPT-B.E §3).
+ * CREATED vs VOIDED is decided by `voided_at` (docs/03 §50, PROMPT-B.E §3);
+ * `approval_status` is the separate admin-confirmation workflow on top
+ * (product decision, 2026-10) and never affects the figures.
  */
 @Index('sales_business_id_branch_id', ['businessId', 'branchId'])
 @Index('sales_branch_id_fuel_type_id', ['branchId', 'fuelTypeId'])
@@ -45,6 +47,43 @@ export class Sale extends BaseEntity {
   @ApiProperty({ example: '8500.000', description: 'CHECK: litres_sold > 0' })
   @Column({ name: 'litres_sold', type: QUANTITY_TYPE, ...QUANTITY_PRECISION })
   litresSold!: string;
+
+  /**
+   * DAY_TOTAL marks the row as the branch's running total for one business
+   * day rather than one counter transaction (product decision, 2026-10).
+   * The partial unique index `sales_day_total_unique` keeps at most one such
+   * row per branch, fuel and business day.
+   */
+  @ApiProperty({ enum: SaleRecordMode })
+  @Column({
+    name: 'record_mode',
+    type: 'enum',
+    enumName: 'sale_record_mode',
+    default: SaleRecordMode.SINGLE,
+  })
+  recordMode!: SaleRecordMode;
+
+  /** Admin confirmation of a manager-recorded figure (2026-10 product decision). */
+  @ApiProperty({ enum: SaleApprovalStatus })
+  @Column({
+    name: 'approval_status',
+    type: 'enum',
+    enumName: 'sale_approval_status',
+    default: SaleApprovalStatus.PENDING,
+  })
+  approvalStatus!: SaleApprovalStatus;
+
+  @ApiProperty({ nullable: true, format: 'uuid', description: 'Who confirmed the figure' })
+  @Column({ name: 'approved_by', type: 'uuid', nullable: true })
+  approvedBy!: string | null;
+
+  @ApiProperty({ nullable: true })
+  @Column({ name: 'approved_at', type: 'timestamptz', nullable: true })
+  approvedAt!: Date | null;
+
+  @ApiProperty({ nullable: true, description: 'Set when a figure was refused' })
+  @Column({ name: 'rejection_reason', type: 'text', nullable: true })
+  rejectionReason!: string | null;
 
   @ApiProperty({ example: '1500.00', description: 'Price snapshot resolved by the backend' })
   @Column({ name: 'unit_price', type: MONEY_TYPE, ...MONEY_PRECISION })

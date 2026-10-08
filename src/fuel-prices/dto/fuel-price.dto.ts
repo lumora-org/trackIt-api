@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
-  IsDateString,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -12,20 +11,22 @@ import {
 } from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 
+/**
+ * Price changes take effect immediately (product decision 2026-10): there is
+ * deliberately no `effectiveFrom` — the server stamps the current instant.
+ * With `forbidNonWhitelisted` enabled, a client still sending one is rejected
+ * with a validation error rather than silently scheduling a change.
+ */
 export class CreateFuelPriceDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   fuelTypeId!: string;
 
-  @ApiProperty({ example: 1500, description: 'Naira per litre, must be greater than 0' })
+  @ApiProperty({ example: 1600, description: 'Naira per litre, must be greater than 0' })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 }, { message: 'pricePerLitre must be a number' })
   @IsPositive({ message: 'pricePerLitre must be greater than 0' })
   pricePerLitre!: number;
-
-  @ApiProperty({ example: '2026-10-05T00:00:00.000Z' })
-  @IsDateString({}, { message: 'effectiveFrom must be an ISO 8601 timestamp' })
-  effectiveFrom!: string;
 }
 
 export class ListFuelPricesQueryDto extends PaginationQueryDto {

@@ -16,6 +16,7 @@ import {
   endOfDayInTimeZone,
   resolveDateRange,
   startOfDayInTimeZone,
+  toDateOnlyInTimeZone,
 } from '../common/utils/date.util';
 import { canTransitionDailyReport } from '../common/constants/state-transitions';
 import { AuditAction, AuditResourceType, AuditService } from '../audit-logs/audit-logs.service';
@@ -29,6 +30,11 @@ import {
   RejectDailyReportDto,
 } from './dto/daily-report.dto';
 import { DailyReportResponseDto } from './dto/daily-report-response.dto';
+import { DailySalesSummaryQueryDto } from './dto/daily-sales-summary.dto';
+import {
+  DailySalesFuelBreakdownDto,
+  DailySalesSummaryRowDto,
+} from './dto/daily-sales-summary-response.dto';
 
 export interface ReportFigures {
   openingStockLitres: string;
@@ -36,6 +42,35 @@ export interface ReportFigures {
   totalSoldLitres: string;
   closingStockLitres: string;
   totalRevenue: string;
+}
+
+/** Raw shapes of the roll-up queries (see `salesSummary`). */
+interface SalesSummaryRawRow {
+  summary_date: string;
+  business_id: string;
+  business_name: string;
+  branch_id: string;
+  branch_name: string;
+  sale_count: string;
+  litres_sold: string;
+  revenue: string;
+  total_count: string;
+}
+
+interface SalesSummaryFuelRawRow {
+  summary_date: string;
+  branch_id: string;
+  fuel_type_id: string;
+  fuel_type_name: string;
+  litres_sold: string;
+  revenue: string;
+}
+
+interface SalesSummaryIncidentRawRow {
+  summary_date: string;
+  branch_id: string;
+  incident_count: string;
+  open_incident_count: string;
 }
 
 /**
@@ -184,6 +219,163 @@ export class DailyReportsService {
       query.pageNumber,
       query.take,
     );
+  }
+
+  /**
+   * Admin sales roll-up (product decision, 2026-10): the destination for
+   * every sale a branch manager records.
+   *
+   * One row per (business day, branch) inside the window — no daily-report
+   * submission is involved, the day the manager records a total it appears
+   * here automatically. Each row carries the day's aggregate, the per-fuel
+   * split, and the branch's incident counts for the same day.
+   *
+   * Days are grouped in the business timezone, which is also how the day-total
+   * rows are pinned (sold_at = noon of the business day), so a window always
+   * matches the day boundaries the managers saw.
+   */
+  async salesSummary(
+    query: DailySalesSummaryQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<PaginatedResult<DailySalesSummaryRowDto>> {
+    const businessId = this.authorization.resolveBusinessScope(actor, query.businessId ?? null);
+
+    const today = toDateOnlyInTimeZone(new Date(), this.businessTimezone);
+    const to = query.to ?? today;
+    const from =
+      query.from ??
+      toDateOnlyInTimeZone(
+        new Date(startOfDayInTimeZone(today, this.businessTimezone).getTime() - 29 * 86_400_000),
+        this.businessTimezone,
+      );
+
+    if (from > to) {
+      throw apiError(ErrorCode.VALIDATION_ERROR, 'from must not be after to.');
+    }
+
+    const start = startOfDayInTimeZone(from, this.businessTimezone);
+    // endOfDayInTimeZone is exclusive, so the `to` day is fully included.
+    const end = endOfDayInTimeZone(to, this.businessTimezone);
+
+    const params: unknown[] = [this.businessTimezone, start, end];
+    const parts: string[] = ['s.voided_at IS NULL', 's.sold_at >= $2', 's.sold_at < $3'];
+    if (businessId) {
+      params.push(businessId);
+      parts.push(`s.business_id = $${params.length}`);
+    }
+    if (query.branchId) {
+      params.push(query.branchId);
+      parts.push(`s.branch_id = $${params.length}`);
+    }
+
+    // The per-fuel split covers the whole window (not just the requested
+    // page) and is merged per (day, branch) below — a window is at most a few
+    // hundred groups, so this stays cheap and keeps the SQL trivial.
+    const fuelRows: SalesSummaryFuelRawRow[] = await this.dataSource.query(
+      `SELECT to_char((s.sold_at AT TIME ZONE $1)::date, 'YYYY-MM-DD') AS summary_date,
+              s.branch_id                                        AS branch_id,
+              s.fuel_type_id                                     AS fuel_type_id,
+              ft.name                                            AS fuel_type_name,
+              COALESCE(SUM(s.litres_sold), 0)                    AS litres_sold,
+              COALESCE(SUM(s.total_amount), 0)                   AS revenue
+         FROM sales s
+         JOIN fuel_types ft ON ft.id = s.fuel_type_id
+        WHERE ${parts.join(' AND ')}
+        GROUP BY 1, s.branch_id, s.fuel_type_id, ft.name
+        ORDER BY ft.name ASC`,
+      params,
+    );
+
+    params.push(query.take);
+    const limitRef = `$${params.length}`;
+    params.push(query.skip);
+    const offsetRef = `$${params.length}`;
+
+    const rows: SalesSummaryRawRow[] = await this.dataSource.query(
+      `SELECT to_char((s.sold_at AT TIME ZONE $1)::date, 'YYYY-MM-DD') AS summary_date,
+              biz.id                                             AS business_id,
+              biz.name                                           AS business_name,
+              b.id                                               AS branch_id,
+              b.name                                             AS branch_name,
+              COUNT(*)                                           AS sale_count,
+              COALESCE(SUM(s.litres_sold), 0)                    AS litres_sold,
+              COALESCE(SUM(s.total_amount), 0)                   AS revenue,
+              COUNT(*) OVER()                                    AS total_count
+         FROM sales s
+         JOIN branches b ON b.id = s.branch_id
+         JOIN businesses biz ON biz.id = s.business_id
+        WHERE ${parts.join(' AND ')}
+        GROUP BY 1, biz.id, biz.name, b.id, b.name
+        ORDER BY summary_date DESC, biz.name ASC, b.name ASC
+        LIMIT ${limitRef} OFFSET ${offsetRef}`,
+      params,
+    );
+
+    // Incidents are keyed by bare DATE, so they compare directly with the
+    // business-tz dates above.
+    const incidentParams: unknown[] = [from, to];
+    const incidentParts: string[] = ['ir.incident_date >= $1', 'ir.incident_date <= $2'];
+    if (businessId) {
+      incidentParams.push(businessId);
+      incidentParts.push(`ir.business_id = $${incidentParams.length}`);
+    }
+    if (query.branchId) {
+      incidentParams.push(query.branchId);
+      incidentParts.push(`ir.branch_id = $${incidentParams.length}`);
+    }
+    const incidentRows: SalesSummaryIncidentRawRow[] = await this.dataSource.query(
+      `SELECT to_char(ir.incident_date, 'YYYY-MM-DD') AS summary_date,
+              ir.branch_id                            AS branch_id,
+              COUNT(*)                                AS incident_count,
+              COUNT(*) FILTER (WHERE ir.status = 'OPEN') AS open_incident_count
+         FROM incident_reports ir
+        WHERE ${incidentParts.join(' AND ')}
+        GROUP BY ir.incident_date, ir.branch_id`,
+      incidentParams,
+    );
+
+    const fuelsByKey = new Map<string, DailySalesFuelBreakdownDto[]>();
+    for (const row of fuelRows) {
+      const key = `${row.summary_date}|${row.branch_id}`;
+      const list = fuelsByKey.get(key) ?? [];
+      list.push({
+        fuelTypeId: row.fuel_type_id,
+        fuelTypeName: row.fuel_type_name,
+        litresSold: this.quantity(row.litres_sold),
+        revenue: this.money(row.revenue),
+      });
+      fuelsByKey.set(key, list);
+    }
+
+    const incidentsByKey = new Map<string, { total: number; open: number }>();
+    for (const row of incidentRows) {
+      incidentsByKey.set(`${row.summary_date}|${row.branch_id}`, {
+        total: Number(row.incident_count),
+        open: Number(row.open_incident_count),
+      });
+    }
+
+    const items = rows.map((row) => {
+      const key = `${row.summary_date}|${row.branch_id}`;
+      const incidents = incidentsByKey.get(key);
+      return {
+        date: row.summary_date,
+        businessId: row.business_id,
+        businessName: row.business_name,
+        branchId: row.branch_id,
+        branchName: row.branch_name,
+        saleCount: Number(row.sale_count),
+        totalLitres: this.quantity(row.litres_sold),
+        totalRevenue: this.money(row.revenue),
+        incidentCount: incidents?.total ?? 0,
+        openIncidentCount: incidents?.open ?? 0,
+        fuels: fuelsByKey.get(key) ?? [],
+      };
+    });
+
+    const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+
+    return PaginatedResult.of(items, total, query.pageNumber, query.take);
   }
 
   async findOneOrFail(id: string, actor: AuthenticatedUser): Promise<DailyReport> {
