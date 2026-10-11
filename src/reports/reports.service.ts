@@ -91,7 +91,7 @@ export class ReportsService {
          JOIN branches branch ON branch.id = sale.branch_id
          JOIN fuel_types fuel_type ON fuel_type.id = sale.fuel_type_id
         WHERE ${filters.join(' AND ')}
-        ORDER BY sale.sold_at DESC`,
+        ORDER BY sale.sold_at DESC, sale.id DESC`,
       params,
     );
 
@@ -226,7 +226,7 @@ export class ReportsService {
          LEFT JOIN suppliers supplier ON supplier.id = fuel_order.supplier_id
          JOIN branches branch ON branch.id = delivery.destination_branch_id
         WHERE ${filters.join(' AND ')}
-        ORDER BY delivery.delivered_at DESC`,
+        ORDER BY delivery.delivered_at DESC, delivery.id DESC, item.id ASC`,
       params,
     );
 
@@ -279,7 +279,7 @@ export class ReportsService {
          FROM daily_reports report
          JOIN branches branch ON branch.id = report.branch_id
         WHERE ${filters.join(' AND ')}
-        ORDER BY report.report_date DESC, branch.name ASC`,
+        ORDER BY report.report_date DESC, branch.name ASC, report.id DESC`,
       params,
     );
 

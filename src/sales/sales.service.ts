@@ -109,7 +109,10 @@ export class SalesService {
       .where('1 = 1')
       // Property path, not the DB column name: skip/take + joins makes TypeORM
       // resolve order criteria through entity metadata (see deliveries findAll).
+      // `id` last: sales stamped in one transaction share sold_at, and an
+      // unresolved tie makes a row appear on two pages or on none.
       .orderBy('sale.soldAt', 'DESC')
+      .addOrderBy('sale.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

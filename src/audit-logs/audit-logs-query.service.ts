@@ -63,6 +63,9 @@ export class AuditLogsQueryService {
       .createQueryBuilder('audit')
       .where('1 = 1')
       .orderBy('audit.created_at', 'DESC')
+      // One action can write several entries in the same transaction, so they
+      // share created_at; `id` keeps their order stable across pages.
+      .addOrderBy('audit.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

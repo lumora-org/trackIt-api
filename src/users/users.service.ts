@@ -146,6 +146,9 @@ export class UsersService {
       .createQueryBuilder('user')
       .where('user.deleted_at IS NULL')
       .orderBy('user.created_at', 'DESC')
+      // Seeded or bulk-created accounts share a timestamp; `id` keeps the order
+      // stable so a row cannot drift between pages.
+      .addOrderBy('user.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

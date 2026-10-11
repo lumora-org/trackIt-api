@@ -8,6 +8,7 @@ import { PaginatedResult } from '../common/interfaces/paginated-result.interface
 import { ListNotificationsQueryDto } from './dto/notification.dto';
 import { AppNotificationDto } from './dto/notification-response.dto';
 import { Notification } from './entities/notification.entity';
+import { PushService } from './push.service';
 
 export interface NotificationRequest {
   type: NotificationType;
@@ -22,6 +23,7 @@ export class NotificationsService {
   constructor(
     @InjectRepository(Notification)
     private readonly repository: Repository<Notification>,
+    private readonly push: PushService,
   ) {}
 
   /**
@@ -30,6 +32,10 @@ export class NotificationsService {
    * Pass the transaction `manager` so the notification commits atomically with
    * the business event that caused it — a report submission and its
    * notification must not be able to disagree (PROMPT-B.E §4.14).
+   *
+   * The push alert is only *armed* here (see `PushService.schedule`): it fires
+   * once the row is actually visible, so a rolled-back transaction sends an
+   * alert for nothing.
    */
   async notifyUser(
     userId: string,
@@ -40,7 +46,7 @@ export class NotificationsService {
       ? options.manager.getRepository(Notification)
       : this.repository;
 
-    return repository.save(
+    const saved = await repository.save(
       repository.create({
         userId,
         businessId: options.businessId ?? null,
@@ -53,6 +59,9 @@ export class NotificationsService {
         readAt: null,
       }),
     );
+
+    this.push.schedule([saved]);
+    return saved;
   }
 
   /**
@@ -65,7 +74,7 @@ export class NotificationsService {
     recipientIds: string[],
     request: NotificationRequest,
   ): Promise<void> {
-    await repository.save(
+    const saved = await repository.save(
       recipientIds.map((userId) =>
         repository.create({
           userId,
@@ -80,6 +89,8 @@ export class NotificationsService {
         }),
       ),
     );
+
+    this.push.schedule(saved);
   }
 
   /** Fans a notification out to every active ADMIN of a business. */
@@ -175,7 +186,7 @@ export class NotificationsService {
       ? options.manager.getRepository(Notification)
       : this.repository;
 
-    await repository.save(
+    const saved = await repository.save(
       unique.map((userId) =>
         repository.create({
           userId,
@@ -190,6 +201,8 @@ export class NotificationsService {
         }),
       ),
     );
+
+    this.push.schedule(saved);
   }
 
   /**
@@ -225,7 +238,12 @@ export class NotificationsService {
     const builder = this.repository
       .createQueryBuilder('notification')
       .where('notification.user_id = :userId', { userId })
+      // Newest first, then `id`: one transaction stamps every row it writes with
+      // the same `now()`, so a SALE_RECORDED and the LOW_INVENTORY it triggered
+      // share a timestamp. Without a tiebreaker their order is whatever the
+      // heap yields, and it changes between page 1 and page 2.
       .orderBy('notification.created_at', 'DESC')
+      .addOrderBy('notification.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

@@ -117,7 +117,10 @@ export class FuelPricesService {
     const builder = this.repository
       .createQueryBuilder('price')
       .where('price.business_id = :businessId', { businessId })
+      // Grades priced on the same instant share effective_from; `id` keeps the
+      // history list deterministic across pages.
       .orderBy('price.effective_from', 'DESC')
+      .addOrderBy('price.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

@@ -41,6 +41,15 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
     errors.push('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different (docs/06 §48)');
   }
 
+  // Web Push is optional, so an absent key pair is legal (the feature simply
+  // stays off). A half-configured pair is not: it would boot with push looking
+  // available and then fail on the first send.
+  const hasVapidPublic = read('VAPID_PUBLIC_KEY') !== '';
+  const hasVapidPrivate = read('VAPID_PRIVATE_KEY') !== '';
+  if (hasVapidPublic !== hasVapidPrivate) {
+    errors.push('VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set together');
+  }
+
   if (errors.length) {
     throw new Error(`Invalid environment configuration:\n  - ${errors.join('\n  - ')}`);
   }

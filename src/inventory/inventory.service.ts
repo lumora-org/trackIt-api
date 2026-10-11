@@ -253,6 +253,9 @@ export class InventoryService {
       .where('1 = 1')
       .orderBy('tx.occurred_at', 'DESC')
       .addOrderBy('tx.created_at', 'DESC')
+      // A sale, a delivery and an adjustment booked in one transaction share both
+      // timestamps; `id` stops those rows swapping places between pages.
+      .addOrderBy('tx.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

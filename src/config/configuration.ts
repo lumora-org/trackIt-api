@@ -77,6 +77,28 @@ export const inventoryConfig = registerAs('inventory', () => ({
   lowStockThresholdLitres: process.env.LOW_INVENTORY_THRESHOLD_LITRES ?? '500',
 }));
 
+/**
+ * Web Push (PWA alerts). Entirely optional: with no VAPID key pair the feature
+ * switches itself off, the REST endpoints answer `enabled: false`, and no send
+ * is ever attempted — so an environment that has not generated keys still
+ * boots exactly as before.
+ */
+export const pushConfig = registerAs('push', () => {
+  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim() ?? '';
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim() ?? '';
+  return {
+    publicKey,
+    privateKey,
+    /** Both halves are needed; one alone is rejected at validation time. */
+    enabled: publicKey !== '' && privateKey !== '',
+    /** `mailto:` or `https:` contact URL — required by the VAPID spec. */
+    subject: process.env.VAPID_SUBJECT?.trim() || 'mailto:alerts@kbyglobal.example',
+    maxSubscriptionsPerUser: toInt(process.env.PUSH_MAX_SUBSCRIPTIONS_PER_USER, 10),
+    /** Seconds a message may sit queued at the push service before being dropped. */
+    ttlSeconds: toInt(process.env.PUSH_TTL_SECONDS, 3600),
+  };
+});
+
 export const configurations = [
   appConfig,
   databaseConfig,
@@ -84,6 +106,7 @@ export const configurations = [
   cookieConfig,
   throttleConfig,
   inventoryConfig,
+  pushConfig,
 ];
 
 export type AppConfig = ReturnType<typeof appConfig>;

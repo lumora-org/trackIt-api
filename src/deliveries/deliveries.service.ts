@@ -229,7 +229,10 @@ export class DeliveriesService {
       // property paths, so this must be `createdAt`, not the DB column name —
       // an unknown path crashes TypeORM's ORDER BY merge (see fuel-orders/
       // sales findAll for the same pattern).
+      // `id` last: deliveries created together share created_at, and an
+      // unresolved tie makes a row appear on two pages or on none.
       .orderBy('delivery.createdAt', 'DESC')
+      .addOrderBy('delivery.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

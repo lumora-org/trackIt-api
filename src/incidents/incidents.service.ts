@@ -87,6 +87,9 @@ export class IncidentsService {
       // resolve order criteria through entity metadata (see deliveries findAll).
       .orderBy('report.incidentDate', 'DESC')
       .addOrderBy('report.createdAt', 'DESC')
+      // `id` last: incidents logged in one transaction share a timestamp, and an
+      // unresolved tie makes a row appear on two pages or on none.
+      .addOrderBy('report.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

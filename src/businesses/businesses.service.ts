@@ -42,6 +42,9 @@ export class BusinessesService {
       .createQueryBuilder('business')
       .where('business.deleted_at IS NULL')
       .orderBy('business.created_at', 'DESC')
+      // Businesses seeded in one run share created_at; `id` makes the order
+      // stable across pages.
+      .addOrderBy('business.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

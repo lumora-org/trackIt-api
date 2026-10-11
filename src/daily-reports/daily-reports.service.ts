@@ -198,6 +198,9 @@ export class DailyReportsService {
       .createQueryBuilder('report')
       .where('1 = 1')
       .orderBy('report.report_date', 'DESC')
+      // Every branch's report for the same day ties on report_date, and rows
+      // submitted together tie on created_at too; `id` keeps paging deterministic.
+      .addOrderBy('report.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 

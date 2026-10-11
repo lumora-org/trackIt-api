@@ -12,6 +12,7 @@ import { IdempotencyKey } from '../idempotency/entities/idempotency-key.entity';
 import { IncidentReport } from '../incidents/entities/incident-report.entity';
 import { InventoryTransaction } from '../inventory/entities/inventory-transaction.entity';
 import { Notification } from '../notifications/entities/notification.entity';
+import { PushSubscription } from '../notifications/entities/push-subscription.entity';
 import { PasswordResetToken } from '../users/entities/password-reset-token.entity';
 import { RefreshToken } from '../users/entities/refresh-token.entity';
 import { Sale } from '../sales/entities/sale.entity';
@@ -38,6 +39,7 @@ export const ENTITIES = [
   DailyReport,
   IncidentReport,
   Notification,
+  PushSubscription,
   AuditLog,
   IdempotencyKey,
 ];
@@ -58,6 +60,7 @@ export {
   InventoryTransaction,
   Notification,
   PasswordResetToken,
+  PushSubscription,
   RefreshToken,
   Sale,
   Supplier,

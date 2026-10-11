@@ -98,7 +98,10 @@ export class FuelOrdersService {
       .where('1 = 1')
       // Property path, not the DB column name: skip/take + joins makes TypeORM
       // resolve order criteria through entity metadata (see deliveries findAll).
+      // `id` last: orders created together share created_at, and an unresolved
+      // tie makes a row appear on two pages or on none.
       .orderBy('order.createdAt', 'DESC')
+      .addOrderBy('order.id', 'DESC')
       .skip(query.skip)
       .take(query.take);
 
